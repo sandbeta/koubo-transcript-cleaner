@@ -1,0 +1,20 @@
+# 迭代笔记（含业务背景，不公开）
+playground/
+
+# 不属于本项目、由其他会话落在同一目录的文件
+qoder-remote-diag.js
+deploy-gh.js
+api-push.js
+
+# 工具产物
+node_modules/
+_dom.html
+_au.html
+_st.html
+_s*.html
+_c_*.js
+_chk_*.js
+_prof*/
+_shot/
+_au/
+_st/
