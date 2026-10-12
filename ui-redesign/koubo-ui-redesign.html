@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>稿纸台 · 口播文字稿整理工具 UI 重设计原型</title>
+<style>
+/* ==========================================================================
+   稿纸台 / Manuscript Desk —— 设计令牌（唯一允许出现色值的地方）
+   依据 ui-redesign/DESIGN.md；对比度为 WCAG 相对亮度公式实算值
+   ========================================================================== */
+:root {
+  /* —— primitive：纸与墨 —— */
+  --p-paper:   #FFFFFF;
+  --p-page:    #F5F4F0;
+  --p-panel:   #FBFAF7;
+  --p-ink-900: #1A1D21;  /* 15.37:1 on page */
+  --p-ink-700: #20242A;  /* 15.59:1 on paper —— 稿纸正文 */
+  --p-ink-600: #4A5157;  /*  7.32:1 on page —— UI 次级 */
+  --p-ink-500: #5E666D;  /*  5.30:1 on page —— 弱化说明下限 */
+  /* —— primitive：动作青 —— */
+  --p-teal-900:#115E59;  /*  6.89:1 on page */
+  --p-teal-700:#0F766E;  /*  5.47:1 with white —— 主按钮底 */
+  --p-teal-600:#0D9488;  /*  4.97:1 on page —— 仅大字/图形 */
+  --p-teal-50: #E6F4F1;
+  /* —— primitive：判定四色 —— */
+  --p-red-700:#B42318; --p-red-800:#97231B; --p-red-50:#FBE9E7;
+  --p-org-700:#B45309; --p-org-800:#9A3412; --p-org-50:#FBEBE0;
+  --p-grn-700:#15803D; --p-grn-800:#166534; --p-grn-50:#E7F4EC;
+  --p-blue-700:#1D4ED8; --p-blue-50:#EAF0FB;
+  /* —— primitive：线 —— */
+  --p-line:  #DDDAD2;  /* 1.4:1 纯装饰分隔 */
+  --p-edge:  #6B7280;  /* 4.83:1 控件边界 */
+  --p-edge-soft: #B4B1A8;
+
+  /* —— semantic —— */
+  --surface-app: var(--p-page);
+  --surface-paper: var(--p-paper);
+  --surface-panel: var(--p-panel);
+  --surface-select: var(--p-teal-50);
+  --surface-hover: #EFEDE6;
+  --ink-primary: var(--p-ink-700);
+  --ink-ui: var(--p-ink-600);
+  --ink-muted: var(--p-ink-500);
+  --ink-on-action: #FFFFFF;
+  --action: var(--p-teal-700);
+  --action-hover: var(--p-teal-900);
+  --action-text: var(--p-teal-900);
+  --flag-must: var(--p-red-800);
+  --flag-mark: var(--p-org-800);
+  --keep: var(--p-grn-800);
+  --quote: var(--p-blue-700);
+  --focus: var(--p-teal-700);
+  --edge-field: var(--p-edge);
+  --rule: var(--p-line);
+  /* 压在饱和底色上的字：亮档白，暗档必须转深（白字压浅青只有 1.5:1） */
+  --ink-on-solid: #FFFFFF;
+
+  /* —— 排印 —— */
+  --font-ui: system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", sans-serif;
+  --font-body: "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", "Noto Serif SC", STSong, SimSun, serif;
+  --font-num: ui-monospace, "SF Mono", Consolas, "JetBrains Mono", monospace;
+  --t-12:12px; --t-13:13px; --t-15:15px; --t-18:18px; --t-22:22px; --t-28:28px; --t-36:36px;
+
+  /* —— 间距（密度 7/10）—— */
+  --s-1:4px; --s-2:8px; --s-3:12px; --s-4:16px; --s-5:24px; --s-6:32px; --s-7:48px;
+
+  /* —— 尺寸 —— */
+  --rail-w:232px; --insp-w:384px;
+  --target:28px;          /* WCAG 2.2 SC 2.5.8 要求 24 CSS px，这里留到 28 */
+  --btn-h:40px;
+  --measure:38em;         /* 稿纸行宽：38 个汉字 */
+
+  /* —— 动效 —— */
+  --d-fast:120ms; --d-panel:200ms; --e-out:cubic-bezier(.2,.8,.2,1); --e-in:cubic-bezier(.4,0,1,1);
+
+  /* —— 组件层 —— */
+  --c-pill-red: var(--p-red-50);   --c-pill-org: var(--p-org-50);
+  --c-pill-grn: var(--p-grn-50);   --c-pill-blue: var(--p-blue-50);
+  --c-row-hover: var(--surface-hover);
+  --c-bar-track: #E4E1D8;
+}
+
+/* 夜稿：稿纸比页面更暗，保持「稿纸是与环境反差最大的面」 */
+[data-theme="dark"] {
+  --p-paper:#0F1315; --p-page:#14181B; --p-panel:#1B2124;
+  --p-ink-900:#E7EAE8; --p-ink-700:#DDE2E4; --p-ink-600:#A9B2B8; --p-ink-500:#8C979E;
+  --p-teal-900:#5EEAD4; --p-teal-700:#2DD4BF; --p-teal-600:#2DD4BF; --p-teal-50:#123834;
+  --p-red-700:#F9A8A0; --p-red-800:#F9A8A0; --p-red-50:#3A1D1B;
+  --p-org-700:#F0B28C; --p-org-800:#F0B28C; --p-org-50:#372415;
+  --p-grn-700:#7DD3A8; --p-grn-800:#7DD3A8; --p-grn-50:#17301F;
+  --p-blue-700:#93B4F5; --p-blue-50:#18233A;
+  --p-line:#262C31; --p-edge:#6E787E; --p-edge-soft:#454D53;
+  --surface-hover:#222A2F; --surface-select:#123834;
+  --ink-on-action:#0F1315; --ink-on-solid:#0F1315; --action-text:#5EEAD4;
+  --focus:#5EEAD4; --c-bar-track:#2A3238;
+}
+@media (prefers-color-scheme: dark) {
+  [data-theme="auto"] {
+    --p-paper:#0F1315; --p-page:#14181B; --p-panel:#1B2124;
+    --p-ink-900:#E7EAE8; --p-ink-700:#DDE2E4; --p-ink-600:#A9B2B8; --p-ink-500:#8C979E;
+    --p-teal-900:#5EEAD4; --p-teal-700:#2DD4BF; --p-teal-600:#2DD4BF; --p-teal-50:#123834;
+    --p-red-700:#F9A8A0; --p-red-800:#F9A8A0; --p-red-50:#3A1D1B;
+    --p-org-700:#F0B28C; --p-org-800:#F0B28C; --p-org-50:#372415;
+    --p-grn-700:#7DD3A8; --p-grn-800:#7DD3A8; --p-grn-50:#17301F;
+    --p-blue-700:#93B4F5; --p-blue-50:#18233A;
+    --p-line:#262C31; --p-edge:#6E787E; --p-edge-soft:#454D53;
+    --surface-hover:#222A2F; --surface-select:#123834;
+    --ink-on-action:#0F1315; --ink-on-solid:#0F1315; --action-text:#5EEAD4;
+    --focus:#5EEAD4; --c-bar-track:#2A3238;
+  }
+}
+
+/* ============================ 基础 ============================ */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--surface-app); color: var(--ink-ui);
+  font: 400 var(--t-15)/1.6 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+h1,h2,h3 { margin: 0; font-weight: 700; color: var(--ink-primary); font-family: var(--font-ui); }
+button { font: inherit; color: inherit; }
+input, textarea, select { font: inherit; }
+.sr-only {
+  position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+  overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+}
+.num { font-family: var(--font-num); font-variant-numeric: tabular-nums; letter-spacing:-.02em; }
+:focus { outline: none; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.ico { width: 18px; height: 18px; flex: 0 0 auto; }
+.ico-sm { width: 15px; height: 15px; flex: 0 0 auto; }
+
+/* ============================ 骨架 ============================ */
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+.bar {
+  display: flex; align-items: center; gap: var(--s-3);
+  height: 56px; padding: 0 var(--s-4); flex: 0 0 auto;
+  background: var(--surface-panel); border-bottom: 1px solid var(--rule);
+}
+.brand { display: flex; align-items: center; gap: var(--s-2); font-weight: 700; color: var(--ink-primary); font-size: var(--t-15); }
+.brand .mark { width: 26px; height: 26px; color: var(--action); }
+.brand .tag {
+  font: 600 var(--t-12)/1 var(--font-num); color: var(--action-text);
+  background: var(--surface-select); padding: 4px 6px; border-radius: 4px;
+}
+.docname {
+  display: flex; align-items: center; gap: var(--s-2); min-width: 0; flex: 1 1 auto;
+  padding: 0 var(--s-3); height: 34px; border-radius: 6px;
+  border: 1px dashed transparent;
+}
+.docname:hover { border-color: var(--p-edge-soft); }
+.docname input {
+  background: none; border: 0; color: var(--ink-primary); font-weight: 600;
+  font-size: var(--t-15); width: 100%; max-width: 320px;
+}
+.bar-right { display: flex; align-items: center; gap: var(--s-2); margin-left: auto; }
+.stat { color: var(--ink-muted); font-size: var(--t-13); }
+
+.body { display: flex; flex: 1 1 auto; min-height: 0; }
+
+/* —— 左轨：5 步 —— */
+.rail {
+  flex: 0 0 var(--rail-w); display: flex; flex-direction: column; gap: var(--s-1);
+  padding: var(--s-4) var(--s-3); overflow-y: auto;
+  background: var(--surface-panel); border-right: 1px solid var(--rule);
+}
+.rail .lead {
+  font: 600 var(--t-12)/1 var(--font-ui); letter-spacing: .12em;
+  color: var(--ink-muted); padding: 0 var(--s-2) var(--s-2);
+}
+.step {
+  display: flex; align-items: center; gap: var(--s-3);
+  min-height: var(--target); padding: var(--s-2) var(--s-2);
+  border: 0; border-radius: 8px; background: none; cursor: pointer;
+  text-align: left; color: var(--ink-ui); position: relative;
+  transition: background-color var(--d-fast) var(--e-out), color var(--d-fast) var(--e-out);
+}
+.step:hover { background: var(--c-row-hover); }
+.step[aria-current="true"] { background: var(--surface-select); color: var(--action-text); font-weight: 600; }
+.step[aria-current="true"]::before {
+  content: ""; position: absolute; left: -12px; top: 6px; bottom: 6px; width: 3px;
+  border-radius: 0 3px 3px 0; background: var(--action);
+}
+.step .no {
+  flex: 0 0 22px; height: 22px; display: grid; place-items: center;
+  border-radius: 50%; border: 1px solid var(--p-edge-soft);
+  font: 600 var(--t-12)/1 var(--font-num); color: var(--ink-muted);
+}
+.step[aria-current="true"] .no { border-color: var(--action); background: var(--action); color: var(--ink-on-action); }
+.step .nm { flex: 1 1 auto; min-width: 0; }
+.step .sub { display: block; font-size: var(--t-12); color: var(--ink-muted); font-weight: 400; }
+.step .cnt {
+  font: 600 var(--t-12)/1 var(--font-num); color: var(--ink-muted);
+  background: var(--p-page); border: 1px solid var(--rule); border-radius: 999px; padding: 4px 7px;
+}
+.step .cnt[data-tone="warn"] { color: var(--flag-mark); background: var(--c-pill-org); border-color: transparent; }
+.rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--s-1); padding-top: var(--s-4); border-top: 1px solid var(--rule); }
+
+/* —— 中栏：稿纸台 —— */
+.desk { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.desk-head {
+  display: flex; align-items: baseline; gap: var(--s-3); flex: 0 0 auto;
+  padding: var(--s-5) var(--s-6) var(--s-3);
+}
+.desk-head h2 { font-size: var(--t-22); letter-spacing: -.01em; }
+.desk-head .why { margin-left: auto; }
+.desk-scroll { flex: 1 1 auto; overflow-y: auto; padding: 0 var(--s-6) var(--s-7); }
+.sheet {
+  background: var(--surface-paper); border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(26,29,33,.06), 0 8px 24px -12px rgba(26,29,33,.18);
+  padding: var(--s-6); max-width: 860px;
+}
+[data-theme="dark"] .sheet, .sheet { }
+[data-theme="dark"] .sheet { box-shadow: 0 1px 0 rgba(0,0,0,.4), 0 12px 32px -16px #000; }
+
+/* —— 右栏：检视器 —— */
+.inspector {
+  flex: 0 0 var(--insp-w); display: flex; flex-direction: column; min-height: 0;
+  background: var(--surface-panel); border-left: 1px solid var(--rule);
+}
+.insp-tabs { display: flex; gap: var(--s-1); padding: var(--s-3) var(--s-3) 0; flex: 0 0 auto; }
+.itab {
+  border: 0; background: none; cursor: pointer; padding: var(--s-2) var(--s-3);
+  min-height: var(--target); border-radius: 8px 8px 0 0; color: var(--ink-muted);
+  font-size: var(--t-13); font-weight: 600;
+  transition: color var(--d-fast) var(--e-out), background-color var(--d-fast) var(--e-out);
+}
+.itab:hover { color: var(--ink-primary); background: var(--c-row-hover); }
+.itab[aria-selected="true"] { color: var(--action-text); background: var(--surface-select); }
+.insp-body { flex: 1 1 auto; overflow-y: auto; padding: var(--s-4); border-top: 1px solid var(--rule); }
+.card { border: 1px solid var(--rule); border-radius: 10px; padding: var(--s-4); margin-bottom: var(--s-4); background: var(--surface-paper); }
+.card > h3 {
+  display: flex; align-items: center; gap: var(--s-2);
+  font-size: var(--t-15); margin-bottom: var(--s-3);
+}
+.card > h3 .n { margin-left: auto; font: 600 var(--t-12)/1 var(--font-num); color: var(--ink-muted); }
+.kv { display: flex; justify-content: space-between; gap: var(--s-3); padding: var(--s-2) 0; border-top: 1px solid var(--rule); font-size: var(--t-13); }
+.kv:first-of-type { border-top: 0; }
+.kv b { color: var(--ink-primary); font-weight: 600; }
+.note { font-size: var(--t-13); color: var(--ink-muted); line-height: 1.7; }
+.note b { color: var(--ink-ui); font-weight: 600; }
+.why-list { margin: 0; padding-left: 1.1em; font-size: var(--t-13); color: var(--ink-ui); line-height: 1.75; }
+.why-list li { margin-bottom: var(--s-2); }
+.why-list code { font: 500 var(--t-12)/1.6 var(--font-num); color: var(--action-text); }
+
+/* ============================ 控件 ============================ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2);
+  min-height: var(--btn-h); padding: 0 var(--s-4); border-radius: 8px;
+  border: 1px solid var(--edge-field); background: var(--surface-paper); color: var(--action-text);
+  cursor: pointer; font-weight: 600; font-size: var(--t-15);
+  transition: background-color var(--d-fast) var(--e-out), border-color var(--d-fast) var(--e-out), transform var(--d-fast) var(--e-out);
+}
+.btn:hover { background: var(--surface-select); }
+.btn:active { transform: scale(.985); }
+.btn-primary { background: var(--action); border-color: var(--action); color: var(--ink-on-action); }
+.btn-primary:hover { background: var(--action-hover); border-color: var(--action-hover); color: var(--ink-on-solid); }
+.btn-ghost { border-color: transparent; background: none; }
+.btn-ghost:hover { background: var(--c-row-hover); }
+.btn-sm { min-height: var(--target); padding: 0 var(--s-3); font-size: var(--t-13); border-radius: 6px; }
+.btn-danger-quiet { border-color: transparent; background: none; color: var(--ink-muted); }
+.btn-danger-quiet:hover { color: var(--p-red-700); background: var(--c-pill-red); }
+.icon-btn {
+  width: var(--target); height: var(--target); display: grid; place-items: center;
+  border: 1px solid transparent; border-radius: 6px; background: none; cursor: pointer; color: var(--ink-ui);
+  transition: background-color var(--d-fast) var(--e-out), color var(--d-fast) var(--e-out);
+}
+.icon-btn:hover { background: var(--c-row-hover); color: var(--ink-primary); }
+/* 命中的是 label 不是 input：包住的 label 才是可指点区域 */
+.seg { display: inline-flex; gap: var(--s-1); background: var(--p-page); border: 1px solid var(--rule); border-radius: 8px; padding: 3px; }
+.seg label {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 0 var(--s-3);
+  border-radius: 6px; cursor: pointer; font-size: var(--t-13); color: var(--ink-ui);
+  transition: background-color var(--d-fast) var(--e-out), color var(--d-fast) var(--e-out);
+}
+.seg label:hover { background: var(--c-row-hover); }
+.seg input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.seg input:checked + span { color: var(--action-text); font-weight: 700; }
+.seg label:has(input:checked) { background: var(--surface-paper); box-shadow: 0 1px 2px rgba(26,29,33,.12); }
+.seg label:focus-within { outline: 3px solid var(--focus); outline-offset: 2px; }
+.field {
+  width: 100%; min-height: 40px; padding: var(--s-2) var(--s-3); border-radius: 8px;
+  border: 1px solid var(--edge-field); background: var(--surface-paper); color: var(--ink-primary);
+}
+.field::placeholder { color: var(--ink-muted); }
+textarea.field { line-height: 1.8; resize: vertical; }
+.pill {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 22px; padding: 2px 8px;
+  border-radius: 999px; font: 600 var(--t-12)/1.4 var(--font-ui);
+}
+.pill-red  { background: var(--c-pill-red);  color: var(--p-red-800); }
+.pill-org  { background: var(--c-pill-org);  color: var(--p-org-800); }
+.pill-grn  { background: var(--c-pill-grn);  color: var(--p-grn-800); }
+.pill-blue { background: var(--c-pill-blue); color: var(--p-blue-700); }
+.pill-mute { background: var(--p-page); color: var(--ink-muted); border: 1px solid var(--rule); }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; min-height: var(--target);
+  padding: 0 var(--s-2) 0 var(--s-3); border-radius: 999px;
+  background: var(--surface-paper); border: 1px solid var(--edge-field); color: var(--ink-primary);
+  font-size: var(--t-13); cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--surface-select); border-color: var(--action); color: var(--action-text); font-weight: 600; }
+.chip .x { width: 18px; height: 18px; display: grid; place-items: center; border-radius: 50%; color: var(--ink-muted); }
+.chip .x:hover { background: var(--c-pill-red); color: var(--p-red-800); }
+
+/* ============================ 稿纸：句级 diff ============================ */
+.ms { font-family: var(--font-body); font-size: var(--t-18); line-height: 2.0; color: var(--ink-primary); max-width: var(--measure); }
+.ms .para-gap { height: var(--s-3); }
+.srow {
+  display: flex; gap: var(--s-3); align-items: flex-start;
+  padding: var(--s-2) var(--s-3); margin: 0 calc(-1 * var(--s-3));
+  border-radius: 8px; border-left: 3px solid transparent;
+  transition: background-color var(--d-fast) var(--e-out);
+}
+.srow:hover, .srow:focus-within { background: var(--surface-hover); }
+.srow .tc {
+  font: 500 var(--t-12)/1.9 var(--font-num); color: var(--ink-muted);
+  flex: 0 0 auto; padding-top: .35em; white-space: nowrap;
+}
+.srow .tx { flex: 1 1 auto; min-width: 0; }
+.srow .ops { flex: 0 0 auto; display: flex; gap: var(--s-1); opacity: 0; transition: opacity var(--d-fast) var(--e-out); }
+.srow:hover .ops, .srow:focus-within .ops, .srow[data-pinned="true"] .ops { opacity: 1; }
+
+/* 已删：划线 + 色条 + 降透明度（形状与颜色双编码） */
+.srow.is-cut { border-left-color: var(--p-org-700); background: var(--c-pill-org); }
+.srow.is-cut .tx { text-decoration: line-through; text-decoration-thickness: 1px; text-decoration-color: var(--p-org-700); color: var(--ink-muted); }
+/* 放回 */
+.srow.is-kept { border-left-color: var(--p-grn-700); }
+.srow.is-kept .tx { color: var(--ink-primary); }
+/* 只标记 */
+.srow.is-mark { border-left-color: var(--p-org-700); background: none; }
+.srow.is-mark .tx::before { content: "【待删】"; font-family: var(--font-ui); font-size: .72em; color: var(--p-org-800); vertical-align: .18em; margin-right: .3em; }
+/* 客户原话 */
+.srow.is-quote .tx { border-left: 2px solid var(--p-blue-700); padding-left: var(--s-3); color: var(--p-blue-700); }
+/* 极限词：词级波浪线，不靠颜色单独承载 */
+.risk-word {
+  text-decoration: underline wavy var(--p-red-700); text-decoration-thickness: 1px;
+  text-underline-offset: 3px; cursor: pointer; background: none; border: 0; padding: 0;
+  font: inherit; color: inherit;
+}
+.risk-word::after { content: " ⚠"; font-family: var(--font-ui); font-size: .68em; color: var(--p-red-700); vertical-align: .22em; }
+
+/* ============================ 表格（素材库 / 成片） ============================ */
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th {
+  text-align: left; font: 600 var(--t-12)/1 var(--font-ui); letter-spacing: .06em;
+  color: var(--ink-muted); padding: var(--s-2) var(--s-3); border-bottom: 1px solid var(--rule);
+  white-space: nowrap;
+}
+.tbl td { padding: var(--s-3); border-bottom: 1px solid var(--rule); vertical-align: top; font-size: var(--t-13); }
+.tbl tr { transition: background-color var(--d-fast) var(--e-out); }
+.tbl tbody tr:hover { background: var(--surface-hover); }
+.tbl .body-cell { font-family: var(--font-body); font-size: var(--t-15); line-height: 1.7; color: var(--ink-primary); max-width: 34em; }
+.bar-mini { display: block; width: 68px; height: 6px; border-radius: 3px; background: var(--c-bar-track); overflow: hidden; }
+.bar-mini i { display: block; height: 100%; background: var(--p-teal-600); border-radius: 3px; }
+.stars { display: inline-flex; gap: 2px; }
+.stars button { width: var(--target); height: var(--target); display: grid; place-items: center; border: 0; background: none; cursor: pointer; color: var(--p-edge-soft); border-radius: 4px; }
+.stars button:hover { background: var(--c-row-hover); }
+.stars button[data-on="true"] { color: var(--p-org-700); }
+
+/* ============================ 其他 ============================ */
+.empty {
+  display: flex; flex-direction: column; align-items: center; gap: var(--s-3);
+  padding: var(--s-7) var(--s-5); text-align: center; color: var(--ink-muted);
+  border: 1px dashed var(--p-edge-soft); border-radius: 10px;
+}
+.empty .glyph { width: 34px; height: 34px; color: var(--p-edge-soft); }
+.empty p { margin: 0; max-width: 30em; font-size: var(--t-13); line-height: 1.7; }
+.gaps { display: grid; gap: var(--s-2); }
+.gap {
+  display: flex; align-items: center; gap: var(--s-2); padding: var(--s-2) var(--s-3);
+  border-radius: 8px; font-size: var(--t-13); border: 1px solid var(--rule);
+}
+.gap[data-state="miss"] { background: var(--c-pill-org); border-color: transparent; color: var(--p-org-800); }
+.gap[data-state="ok"] { color: var(--ink-muted); }
+.statusbar {
+  display: flex; align-items: center; gap: var(--s-4); flex: 0 0 auto;
+  height: 34px; padding: 0 var(--s-5); border-top: 1px solid var(--rule);
+  background: var(--surface-panel); font-size: var(--t-12); color: var(--ink-muted);
+}
+kbd {
+  font: 600 var(--t-12)/1 var(--font-num); padding: 3px 5px; border-radius: 4px;
+  border: 1px solid var(--p-edge-soft); background: var(--surface-paper); color: var(--ink-ui);
+}
+#toast {
+  position: fixed; left: 50%; bottom: var(--s-6); transform: translate(-50%, 12px);
+  display: flex; align-items: center; gap: var(--s-2);
+  min-height: 40px; padding: var(--s-2) var(--s-4); border-radius: 10px;
+  background: var(--p-ink-900); color: var(--p-paper); font-size: var(--t-13); font-weight: 600;
+  box-shadow: 0 12px 32px -12px rgba(0,0,0,.5);
+  opacity: 0; pointer-events: none;
+  transition: opacity var(--d-panel) var(--e-out), transform var(--d-panel) var(--e-out);
+  max-width: min(560px, 90vw);
+}
+[data-theme="dark"] #toast { background: var(--p-ink-900); color: var(--p-paper); }
+#toast[data-show="true"] { opacity: 1; transform: translate(-50%, 0); }
+#toast[data-tone="warn"] { background: var(--flag-mark); color: var(--ink-on-solid); }
+
+/* 抽屉（设置） */
+.drawer {
+  position: fixed; inset: 0 auto 0 0; width: min(420px, 92vw); z-index: 30;
+  background: var(--surface-panel); border-right: 1px solid var(--rule);
+  transform: translateX(-100%); transition: transform var(--d-panel) var(--e-out);
+  display: flex; flex-direction: column; box-shadow: 0 0 60px rgba(0,0,0,.18);
+}
+.drawer[data-open="true"] { transform: none; }
+.scrim { position: fixed; inset: 0; z-index: 20; background: rgba(26,29,33,.32); opacity: 0; pointer-events: none; transition: opacity var(--d-panel) var(--e-out); }
+.scrim[data-open="true"] { opacity: 1; pointer-events: auto; }
+.drawer header { display: flex; align-items: center; gap: var(--s-2); padding: var(--s-4); border-bottom: 1px solid var(--rule); }
+.drawer .inner { padding: var(--s-4); overflow-y: auto; }
+
+/* 响应式 */
+@media (max-width: 1280px) { :root { --insp-w: 336px; --measure: 34em; } }
+@media (max-width: 1040px) {
+  .body { flex-direction: column; overflow-y: auto; }
+  .rail { flex: 0 0 auto; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--rule); padding: var(--s-2); }
+  .rail .lead, .rail-foot { display: none; }
+  .step .sub { display: none; }
+  .inspector { flex: 1 1 auto; border-left: 0; border-top: 1px solid var(--rule); }
+  .desk-scroll { padding: 0 var(--s-4) var(--s-6); }
+  .desk-head { padding: var(--s-4); }
+  .sheet { padding: var(--s-4); }
+}
+@media (max-width: 720px) {
+  .bar { flex-wrap: wrap; height: auto; padding: var(--s-2) var(--s-3); }
+  .docname { order: 3; flex: 1 1 100%; }
+  .step .nm { font-size: var(--t-13); }
+  .ms { font-size: var(--t-18); line-height: 1.9; }
+  .srow { flex-wrap: wrap; }
+  .srow .ops { opacity: 1; width: 100%; justify-content: flex-end; }
+  :root { --measure: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 1ms !important; animation-duration: 1ms !important; }
+  #toast { transform: translate(-50%, 0); }
+}
+</style>
+</head>
+<body>
+
+<!-- ===================== 图标符号表（inline SVG，currentColor；0×0 是刻意的） ===================== -->
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <defs>
+    <symbol id="i-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M5 4h11l3 3v13H5z"/><path d="M9 9h7M9 13h7M9 17h4"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6.7 3L3 13"/></symbol>
+    <symbol id="i-warn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+    <symbol id="i-flag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V4s-1 1-4 1-5-2-8-2-4 1-4 1Z"/><path d="M4 22v-7"/></symbol>
+    <symbol id="i-quote" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15H4a1 1 0 0 1-1-1V9a3 3 0 0 1 3-3"/><path d="M17 15h-3a1 1 0 0 1-1-1V9a3 3 0 0 1 3-3"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.7 5.8 6.3.8-4.6 4.4 1.2 6.3L12 17.3 6.4 20.3l1.2-6.3L3 9.6l6.3-.8Z"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13M6 12l6 6 6-6M4 21h16"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.3a2 2 0 1 1-4 0v-.2a1.6 1.6 0 0 0-2.8-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3.5 15H3a2 2 0 1 1 0-4h.2A1.6 1.6 0 0 0 4.4 8.2l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H23a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4.9Z"/></symbol>
+    <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.4 1.4M17.6 17.6 19 19M19 5l-1.4 1.4M6.4 17.6 5 19"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></symbol>
+    <symbol id="i-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4M12 4v13"/></symbol>
+    <symbol id="i-wand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m3 21 12-12M14 4l1 2 2 1-2 1-1 2-1-2-2-1 2-1ZM19 11l.7 1.3 1.3.7-1.3.7-.7 1.3-.7-1.3-1.3-.7 1.3-.7Z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 4v16M17 4v16M2 12h20M2 8h5M2 16h5M17 8h5M17 16h5"/></symbol>
+    <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 0 4 22.5Z"/><path d="M4 4.5v18"/></symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <!-- ===================== 顶部命令条 ===================== -->
+  <header class="bar">
+    <div class="brand">
+      <svg class="mark" aria-hidden="true"><use href="#i-mark"/></svg>
+      <span>稿纸台</span>
+      <span class="tag" aria-hidden="true">v3 原型</span>
+    </div>
+    <div class="docname">
+      <label class="sr-only" for="docTitle">这条片子的标题（用于导出文件名与一级标题）</label>
+      <input id="docTitle" value="装修报价里的增项坑" autocomplete="off">
+    </div>
+    <div class="bar-right">
+      <span class="stat"><span class="num" id="barSent">13</span> 句 · <span class="num" id="barChar">512</span> 字 · <span class="num">03:41</span></span>
+      <button class="icon-btn" id="btnTheme" aria-label="切换主题：当前跟随系统">
+        <svg class="ico" aria-hidden="true"><use href="#i-auto"/></svg>
+      </button>
+      <button class="icon-btn" data-act="open-settings" aria-label="打开标准设置抽屉">
+        <svg class="ico" aria-hidden="true"><use href="#i-gear"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="body">
+
+    <!-- ===================== 左轨：五步 ===================== -->
+    <nav class="rail" aria-label="整理流程" id="rail">
+      <span class="lead">流程</span>
+      <button class="step" data-stage="std">
+        <span class="no">1</span><span class="nm">过滤标准<span class="sub">三要素与黑名单</span></span>
+      </button>
+      <button class="step" data-stage="paste">
+        <span class="no">2</span><span class="nm">粘贴原稿<span class="sub">转写稿进台</span></span>
+      </button>
+      <button class="step" data-stage="diff" aria-current="true">
+        <span class="no">3</span><span class="nm">逐句核对<span class="sub">这一刀切得对不对</span></span>
+        <span class="cnt" id="cntDiff">4 处待判</span>
+      </button>
+      <button class="step" data-stage="model">
+        <span class="no">4</span><span class="nm">交给大模型<span class="sub">Prompt 与终稿</span></span>
+      </button>
+      <button class="step" data-stage="vault">
+        <span class="no">5</span><span class="nm">素材与战绩<span class="sub">零件库存 · 成片</span></span>
+        <span class="cnt" id="cntVault">18 件</span>
+      </button>
+      <div class="rail-foot">
+        <button class="step" data-act="open-settings">
+          <svg class="ico" aria-hidden="true"><use href="#i-book"/></svg>
+          <span class="nm">标准与备份<span class="sub">不影响当前稿</span></span>
+        </button>
+      </div>
+    </nav>
+
+    <!-- ===================== 中栏 ===================== -->
+    <main class="desk" id="desk" tabindex="-1">
+      <div class="desk-head">
+        <h2 id="deskTitle">逐句核对</h2>
+        <button class="btn btn-ghost btn-sm why" data-act="why">
+          <svg class="ico-sm" aria-hidden="true"><use href="#i-eye"/></svg>设计依据
+        </button>
+      </div>
+      <div class="desk-scroll" id="deskBody"><!-- JS 渲染 --></div>
+    </main>
+
+    <!-- ===================== 右栏 ===================== -->
+    <aside class="inspector" aria-label="检视器">
+      <div class="insp-tabs" role="tablist" aria-label="检视器面板">
+        <button class="itab" role="tab" id="tab-judge" aria-controls="inspBody" aria-selected="true">判断</button>
+        <button class="itab" role="tab" id="tab-risk" aria-controls="inspBody" aria-selected="false">风险 <span class="num" id="riskTabN">2</span></button>
+        <button class="itab" role="tab" id="tab-why" aria-controls="inspBody" aria-selected="false">为什么</button>
+      </div>
+      <div class="insp-body" id="inspBody" role="tabpanel" aria-labelledby="tab-judge"></div>
+    </aside>
+  </div>
+
+  <!-- ===================== 状态条 ===================== -->
+  <footer class="statusbar">
+    <span><kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>5</kbd> 切步骤</span>
+    <span><kbd>Tab</kbd> 到句子后按 <kbd>Enter</kbd> 放回 / 撤回答回</span>
+    <span><kbd>Esc</kbd> 关抽屉</span>
+    <span style="margin-left:auto">数据只在浏览器里；全站只开一个播报区，本页不发起任何网络请求</span>
+  </footer>
+</div>
+
+<!-- ===================== 设置抽屉 ===================== -->
+<div class="scrim" id="scrim" data-open="false"></div>
+<div class="drawer" id="drawer" data-open="false" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+  <header>
+    <h2 id="drawerTitle" style="font-size:var(--t-18)">过滤标准</h2>
+    <button class="icon-btn" data-act="close-settings" aria-label="关闭设置" style="margin-left:auto">
+      <svg class="ico" aria-hidden="true"><use href="#i-x"/></svg>
+    </button>
+  </header>
+  <div class="inner" id="drawerBody"></div>
+</div>
+
+<!-- 全站唯一 live region：不要给别的计数节点加 aria-live -->
+<div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<script>
+/* ==========================================================================
+   稿纸台原型 —— 只为验证设计的状态与交互，不接产品逻辑层
+   ========================================================================== */
+(function () {
+  'use strict';
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var ico = function (n, cls) { return '<svg class="' + (cls || 'ico-sm') + '" aria-hidden="true"><use href="#i-' + n + '"/></svg>'; };
+
+  /* ---------------- 示例数据（取自产品内置示例稿） ---------------- */
+  /* state: plain 保留 / cut 已删 / mark 只标记 / kept 人工放回 */
+  var S = [
+    { tc: '00:00', tx: '大家好，我是小王，做装修这行已经八年了，今天给大家分享一个很多业主都会踩的坑。', st: 'cut', why: '开场套路：自我介绍 + 今天分享' },
+    { tc: '00:11', tx: '嗯，那个，其实吧，很多客户第一次来找我的时候，都是先问价格。', st: 'cut', why: '整句只有语气词' },
+    { tc: '00:19', tx: '上个月有个客户，他对比了四家公司，最后选了一家报价最便宜的，便宜了整整两万块。', st: 'plain', part: '带数字的结果', risk: [['最便宜', '极限词']] },
+    { tc: '00:31', tx: '结果呢，结果就是开工到一半，工长说这个要加钱那个要加钱，最后总共多花了三万五。', st: 'plain', part: '冲突' },
+    { tc: '00:45', tx: '我当时接到他电话的时候，他声音都是抖的，他说小王我是不是被人坑了。', st: 'plain', part: '客户原话', quote: true },
+    { tc: '00:58', tx: '所谓增项，说白了就是指合同里没有写，但是施工过程中必须增加的费用。', st: 'mark', why: '术语解释（当前模式：只标记）' },
+    { tc: '01:10', tx: '根据行业数据显示，超过六成的装修纠纷都是来自主材和人工的增项。', st: 'plain', risk: [['超过六成', '无来源数据']] },
+    { tc: '01:22', tx: '报价低不是便宜，报价准才是便宜。', st: 'cut', why: '与第 9 句重复（实词重合 100%）' },
+    { tc: '01:30', tx: '报价低不是便宜，报价准才是便宜。', st: 'plain', part: '价值观金句' },
+    { tc: '01:38', tx: '我一直跟我自己的客户讲，你可以拿着我的报价单去比，比完你再回来找我。', st: 'plain', part: '我的动作' },
+    { tc: '01:52', tx: '反正你至少要问清楚三件事：水电按米还是按项，瓷砖要不要找平，拆除含不含清运。', st: 'mark', why: '清单句，删了会丢信息（建议留着）' },
+    { tc: '02:14', tx: '这三件事问明白了，你就不会多花冤枉钱。', st: 'plain' },
+    { tc: '02:26', tx: '行，那今天就聊到这里，记得点赞关注，我们下期见。', st: 'cut', why: '结尾套路' }
+  ];
+
+  var RISK = [
+    { n: '最便宜', cat: '极限词', si: 2, tc: '00:19', tip: '《广告法》第九条：不得使用“最”“第一”等绝对化用语。改法：给它比较的对象，比如「四家里报价最低的一家」。' },
+    { n: '超过六成', cat: '无来源数据', si: 6, tc: '01:10', tip: '带数字的事实必须能说出来源，否则发布后被平台判定为虚假宣传。要么补「据 XX 协会 2025 年报告」，要么把数字去掉改成感受。' }
+  ];
+
+  var PARTS = [
+    { n: '冲突', ok: true, from: '00:31 多花了三万五' },
+    { n: '我的动作', ok: true, from: '01:38 拿我的报价单去比' },
+    { n: '客户原话', ok: true, from: '00:45 我是不是被人坑了' },
+    { n: '带数字的结果', ok: true, from: '00:19 便宜两万 / 00:31 多花三万五' },
+    { n: '真实细节', ok: false, from: '全篇没有场景、动作、物件' },
+    { n: '价值观金句', ok: true, from: '01:30 报价准才是便宜' }
+  ];
+
+  var VAULT = [
+    { tx: '他对比了四家公司，最后选了最便宜的，结果多花三万五', bucket: '带数字的结果', used: 3, perf: 4.6, tc: '00:19' },
+    { tx: '他说：小王，我是不是被人坑了', bucket: '客户原话', used: 5, perf: 4.8, tc: '00:45' },
+    { tx: '开工到一半，工长说这个要加钱那个要加钱', bucket: '冲突', used: 2, perf: 4.1, tc: '00:31' },
+    { tx: '你可以拿我的报价单去比，比完再回来找我', bucket: '我的动作', used: 1, perf: 3.9, tc: '01:38' },
+    { tx: '水电按米还是按项，瓷砖要不要找平，拆除含不含清运', bucket: '真实细节', used: 0, perf: 0, tc: '01:52' },
+    { tx: '报价低不是便宜，报价准才是便宜', bucket: '价值观金句', used: 4, perf: 4.4, tc: '01:30' },
+    { tx: '验收那天他自己拿卷尺量，量完没说话', bucket: '真实细节', used: 0, perf: 0, tc: '—' }
+  ];
+  var BUCKETS = ['全部', '冲突', '我的动作', '客户原话', '带数字的结果', '真实细节', '价值观金句'];
+
+  var TAKES = [
+    { t: '增项坑：装修报价对比', d: '10-08', star: 4, src: 1, lines: '本条用了 5 件素材', hasBody: true },
+    { t: '为什么你不该在直播间买瓷砖', d: '09-27', star: 3, src: 2, lines: '本条用了 3 件素材', hasBody: true },
+    { t: '工期拖延的三个真原因', d: '09-15', star: 5, src: 1, lines: '本条用了 4 件素材', hasBody: true }
+  ];
+
+  var WHY = {
+    diff: [
+      '清洗报告不做成表格，直接把稿子当报告：<code>.srow</code> 就是句子本体，左色条＝状态，划线＝已删，颜色与形状同时编码，黑白打印也读得出来。',
+      '放回按钮默认淡出、hover 或焦点进入才出现（<code>opacity</code> 不是 <code>display</code>），键盘用户 Tab 进来一定看得见。',
+      '行宽锁 <code>--measure: 38em</code>：中文长行会串行，38 字是读句与扫行的折中。'
+    ],
+    std: [
+      '标准是配置，不是每天要看的东西，所以收进抽屉与第 1 步，主屏不再常驻两张设置卡。',
+      '黑名单词用 <code>.chip</code>，删除热区是右侧 × 本体（28×28），不靠 hover 才出现。'
+    ],
+    paste: [
+      '粘贴区独占稿纸面：进来先看见空白稿纸和一条明确的下一步，而不是一屏按钮。',
+      '「开始预清洗」是这一屏唯一的 <code>.btn-primary</code>，一个屏只允许一个主按钮。'
+    ],
+    model: [
+      'Prompt 包与终稿是「输入—输出」的往返，所以并排同屏，用等宽字（<code>--font-num</code>）显示行数与字数，数字跳动不抖行。',
+      '复制成功只用一个 toast（全站唯一 live region），不再给计数节点挂 <code>aria-live</code> 抢话。'
+    ],
+    vault: [
+      '素材的「表现」是均分不是排名：用 <code>.bar-mini</code> 表达长度 + 数字表达分值，不单靠颜色。',
+      '空状态写下一步做什么，并给一个真的能点的动作，不写「暂无数据」。'
+    ]
+  };
+
+  /* ---------------- 状态 ---------------- */
+  var stage = 'diff', inspTab = 'judge', bucket = '全部', lastFocus = null, toneTimer = null;
+
+  /* ---------------- 工具 ---------------- */
+  function toast(msg, tone) {
+    var el = $('toast');
+    el.textContent = msg;
+    el.setAttribute('data-tone', tone || 'ok');
+    el.setAttribute('data-show', 'true');
+    clearTimeout(toneTimer);
+    toneTimer = setTimeout(function () { el.setAttribute('data-show', 'false'); }, 2600);
+  }
+  function counts() {
+    var cut = S.filter(function (x) { return x.st === 'cut'; }).length;
+    var mark = S.filter(function (x) { return x.st === 'mark'; }).length;
+    var kept = S.filter(function (x) { return x.st === 'kept'; }).length;
+    var chars = S.reduce(function (a, x) { return a + (x.st === 'cut' ? 0 : x.tx.length); }, 0);
+    return { cut: cut, mark: mark, kept: kept, todo: cut + mark, chars: chars, total: S.length };
+  }
+  function syncBar() {
+    var c = counts();
+    $('barSent').textContent = String(c.total - c.cut);
+    $('barChar').textContent = String(c.chars);
+    var d = $('cntDiff');
+    d.textContent = c.todo ? c.todo + ' 处待判' : '已全部核对';
+    d.setAttribute('data-tone', c.todo ? 'warn' : 'ok');
+    $('riskTabN').textContent = String(RISK.length);
+  }
+
+  /* ---------------- 中栏渲染 ---------------- */
+  function rowHtml(x, i) {
+    var cls = x.st === 'cut' ? 'is-cut' : x.st === 'kept' ? 'is-kept' : x.st === 'mark' ? 'is-mark' : '';
+    if (x.quote && x.st !== 'cut') cls += ' is-quote';
+    var tx = esc(x.tx);
+    if (x.risk) x.risk.forEach(function (r) {
+      tx = tx.replace(r[0], '<button class="risk-word" data-act="risk" data-i="' + i + '">' + r[0] + '</button>');
+    });
+    var ops = '';
+    if (x.st === 'cut') ops = '<button class="btn btn-sm" data-act="restore" data-i="' + i + '">' + ico('undo') + '放回</button>';
+    else if (x.st === 'mark') ops = '<button class="btn btn-sm" data-act="drop" data-i="' + i + '">删整句</button>' +
+      '<button class="btn btn-sm" data-act="keep" data-i="' + i + '">' + ico('check') + '留着</button>';
+    else ops = '<button class="btn btn-sm" data-act="flag" data-i="' + i + '">标记待删</button>';
+    var tag = x.part ? '<span class="pill pill-blue" style="margin-left:8px">' + esc(x.part) + '</span>' : '';
+    var note = x.st === 'cut' || x.st === 'mark'
+      ? '<span class="pill ' + (x.st === 'cut' ? 'pill-org' : 'pill-mute') + '" style="margin-left:8px">' + esc(x.why || '') + '</span>'
+      : (x.st === 'kept' ? '<span class="pill pill-grn" style="margin-left:8px">已放回</span>' : '');
+    return '<div class="srow ' + cls + '" data-i="' + i + '">' +
+      '<span class="tc num">' + x.tc + '</span>' +
+      '<span class="tx">' + tx + tag + note + '</span>' +
+      '<span class="ops">' + ops + '</span></div>';
+  }
+
+  var render = {};
+
+  render.diff = function () {
+    var c = counts();
+    return '<div class="sheet"><div class="ms">' +
+      S.map(rowHtml).join('<div class="para-gap"></div>') +
+      '</div></div>' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-top:16px;max-width:860px">' +
+      '<div style="flex:1 1 auto;height:6px;border-radius:3px;background:var(--c-bar-track);overflow:hidden">' +
+      '<i style="display:block;height:100%;background:var(--p-teal-600);border-radius:3px;width:' +
+      Math.round((c.total - c.todo) / c.total * 100) + '%"></i></div>' +
+      '<span class="note num">' + (c.total - c.todo) + '/' + c.total + ' 已核对</span>' +
+      '<button class="btn btn-primary" data-act="finish-diff">' + ico('wand') + '核对完，生成 Prompt 包</button></div>';
+  };
+
+  render.paste = function () {
+    return '<div class="sheet">' +
+      '<label class="sr-only" for="rawTa">原始口播稿（语音转文字得到的整段文稿）</label>' +
+      '<textarea id="rawTa" class="field" style="font-family:var(--font-body);font-size:17px;line-height:2" rows="14" ' +
+      'placeholder="把语音转文字得到的口播稿整段粘贴到这里（带时间码也可以，工具会保留时间码）…">' +
+      esc('大家好，我是小王，做装修这行已经八年了，今天给大家分享一个很多业主都会踩的坑。\n嗯，那个，其实吧，很多客户第一次来找我的时候，都是先问价格。\n上个月有个客户，他对比了四家公司，最后选了一家报价最便宜的，便宜了整整两万块。') +
+      '</textarea>' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-top:16px">' +
+      '<button class="btn btn-primary" data-act="to-diff">' + ico('wand') + '开始预清洗</button>' +
+      '<button class="btn" data-act="sample">' + ico('book') + '载入示例稿</button>' +
+      '<button class="btn btn-danger-quiet" data-act="clear-raw">清空文稿</button>' +
+      '<span class="note num" style="margin-left:auto">137 字 · 3 句</span></div>' +
+      '</div>';
+  };
+
+  render.std = function () {
+    var f = [
+      ['有信息量', '删掉之后观众少知道一件事。留。'],
+      ['可画面化', '剪得出对应画面。剪不出的长段说明，压缩或删。'],
+      ['服务主线', '和「增项」这条主线无关的枝节，先挪进素材库。']
+    ];
+    var bl = ['大家好', '今天分享', '那个', '其实吧', '就是说', '反正', '点赞关注'];
+    return '<div class="sheet" style="max-width:760px">' +
+      '<h3 style="font-size:var(--t-18);margin:0 0 8px;color:var(--ink-primary)">三要素过滤标准</h3>' +
+      '<div class="gaps">' + f.map(function (x) {
+        return '<div class="gap" data-state="ok"><span class="pill pill-grn">' + ico('check') + x[0] + '</span><span class="note">' + esc(x[1]) + '</span></div>';
+      }).join('') + '</div>' +
+      '<h3 style="font-size:var(--t-18);margin:24px 0 8px;color:var(--ink-primary)">黑名单（命中即处理）</h3>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:8px">' + bl.map(function (x) {
+        return '<span class="chip">' + esc(x) + '<button class="x" data-act="del-word" data-w="' + esc(x) + '" aria-label="从黑名单删除 ' + esc(x) + '">' + ico('x', 'ico-sm') + '</button></span>';
+      }).join('') + '</div>' +
+      '<div style="display:flex;align-items:center;gap:12px;margin-top:16px">' +
+      '<input class="field" id="newWord" style="max-width:260px" placeholder="新增要删的类型" aria-label="新增要删除的类型">' +
+      '<button class="btn" data-act="add-word">添加</button>' +
+      '<div class="seg" role="group" aria-label="黑名单处理方式">' +
+      '<label><input type="radio" name="blm" checked><span>整句删除</span></label>' +
+      '<label><input type="radio" name="blm"><span>只标记【待删】</span></label></div></div>' +
+      '<p class="note" style="margin-top:16px">标准改动会让已生成的 Prompt 包失效，取用前按最新标准重建——这条规则在新 UI 里靠第 1 步的角标提示，不靠弹窗。</p>' +
+      '</div>';
+  };
+
+  render.model = function () {
+    var p = '【任务】把下面的口播清洗稿整理成可开剪的成片稿。\n【硬约束】不得添加文稿中不存在的事实、数字、人名、时间；不得改写客户原话的措辞；每删一句必须在报告里留痕。\n【输出】Markdown：一级标题=片名，二级标题=段落，句末标注时间码。\n\n【清洗稿】\n' +
+      S.filter(function (x) { return x.st !== 'cut'; }).map(function (x) { return x.tc + ' ' + x.tx; }).join('\n');
+    return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;max-width:1080px">' +
+      '<div class="sheet"><h3 style="margin:0 0 8px;font-size:var(--t-18)">Prompt 包（交给大模型）</h3>' +
+      '<label class="sr-only" for="promptTa">Prompt 包</label>' +
+      '<textarea id="promptTa" class="field" readonly rows="13" style="font-family:var(--font-num);font-size:13px;line-height:1.8">' + esc(p) + '</textarea>' +
+      '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary" data-act="copy" data-what="Prompt 包">' + ico('copy') + '复制</button>' +
+      '<button class="btn" data-act="dl">' + ico('down') + '下载 .txt</button>' +
+      '<span class="note num" style="margin-left:auto;align-self:center">' + p.length + ' 字</span></div></div>' +
+      '<div class="sheet"><h3 style="margin:0 0 8px;font-size:var(--t-18)">最终整理稿（大模型返回后粘回）</h3>' +
+      '<textarea class="field" rows="13" style="font-family:var(--font-body);font-size:17px;line-height:1.9" placeholder="把大模型返回的 Markdown 粘贴到这里，成片记录会自动登记这条…"></textarea>' +
+      '<div style="display:flex;gap:8px;margin-top:12px"><button class="btn btn-primary" data-act="copy" data-what="Markdown">' + ico('copy') + '复制 Markdown</button>' +
+      '<button class="btn" data-act="dl">' + ico('down') + '下载 .md</button>' +
+      '<button class="btn btn-ghost" data-act="to-vault">登记成片 →</button></div></div></div>';
+  };
+
+  render.vault = function () {
+    var rows = VAULT.filter(function (v) { return bucket === '全部' || v.bucket === bucket; });
+    var body = rows.length
+      ? '<table class="tbl"><thead><tr><th>素材</th><th>桶</th><th>用过</th><th>表现</th><th>操作</th></tr></thead><tbody>' +
+      rows.map(function (v) {
+        var i = VAULT.indexOf(v);
+        return '<tr><td class="body-cell">' + esc(v.tx) + '<div class="note num" style="margin-top:4px">来源 ' + esc(v.tc) + '</div></td>' +
+          '<td><span class="pill pill-blue">' + esc(v.bucket) + '</span></td>' +
+          '<td class="num">' + v.used + ' 次</td>' +
+          '<td>' + (v.perf ? '<span class="bar-mini"><i style="width:' + Math.round(v.perf / 5 * 100) + '%"></i></span><span class="num" style="font-size:var(--t-12)">均分 ' + v.perf.toFixed(1) + '</span>' : '<span class="pill pill-mute">未用过</span>') + '</td>' +
+          '<td><button class="btn btn-sm" data-act="vault-edit" data-i="' + i + '">改桶</button></td></tr>';
+      }).join('') + '</tbody></table>'
+      : '<div class="empty">' + '<svg class="glyph" aria-hidden="true"><use href="#i-box"/></svg>' +
+      '<p><b style="color:var(--ink-primary)">' + esc(bucket) + ' 这个桶还是空的。</b>清洗时被删掉但你可能还想用的句子会自动落到这里；也可以在第 3 步按住某句选「存进素材库」。</p>' +
+      '<button class="btn" data-act="sample2">' + ico('book') + '载入示例稿试一下</button></div>';
+    return '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px">' +
+      BUCKETS.map(function (b) {
+        return '<button class="chip" data-act="bucket" data-b="' + esc(b) + '" aria-pressed="' + (b === bucket) + '">' + esc(b) + '</button>';
+      }).join('') +
+      '<span style="margin-left:auto;display:flex;gap:8px">' +
+      '<button class="btn btn-sm" data-act="vault-add">' + ico('plus') + '记一笔</button>' +
+      '<button class="btn btn-sm btn-danger-quiet" data-act="vault-clear">' + ico('trash') + '清空库存</button></span></div>' +
+      '<div class="sheet" style="padding:0;overflow:hidden">' + body + '</div>' +
+      '<h3 style="font-size:var(--t-22);margin:32px 0 12px">成片记录</h3>' +
+      '<div class="sheet" style="padding:0;overflow:hidden"><table class="tbl"><thead><tr><th>成片</th><th>用了几件素材</th><th>打分</th><th>操作</th></tr></thead><tbody>' +
+      TAKES.map(function (t, i) {
+        return '<tr><td><b style="color:var(--ink-primary)">' + esc(t.t) + '</b><div class="note num" style="margin-top:4px">' + esc(t.d) + ' · ' + esc(t.lines) + '</div></td>' +
+          '<td class="num">' + t.src + ' 件</td>' +
+          '<td><span class="stars" role="group" aria-label="给「' + esc(t.t) + '」打分">' +
+          [1, 2, 3, 4, 5].map(function (n) {
+            /* 五颗星都要能 Tab 到：早先给未点亮的星挂 tabindex="-1"，键盘就没法把分往上打 */
+            return '<button data-act="star" data-i="' + i + '" data-n="' + n + '" data-on="' + (n <= t.star) + '"' +
+              ' aria-pressed="' + (n <= t.star) + '" aria-label="给「' + esc(t.t) + '」打 ' + n + ' 星"' +
+              '><svg class="ico-sm" aria-hidden="true"><use href="#i-star"/></svg></button>';
+          }).join('') + '<span class="num" style="margin-left:6px;font-size:var(--t-12)">' + t.star + '.0</span></span></td>' +
+          '<td><button class="btn btn-sm" data-act="take-load">载入这篇</button></td></tr>';
+      }).join('') + '</tbody></table></div>';
+  };
+
+  var TITLES = { std: '过滤标准', paste: '粘贴原稿', diff: '逐句核对', model: '交给大模型', vault: '素材与战绩' };
+
+  /* ---------------- 右栏渲染 ---------------- */
+  function inspHtml() {
+    if (inspTab === 'why') {
+      var list = WHY[stage] || [];
+      return '<h3 style="font-size:var(--t-15);margin:0 0 12px">这一步为什么这样做</h3><ul class="why-list">' +
+        list.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>' +
+        '<p class="note" style="margin-top:16px">规范全文见 <code>ui-redesign/DESIGN.md</code>，对比度为实算值。</p>';
+    }
+    if (inspTab === 'risk') {
+      return '<div class="card"><h3>' + ico('warn') + '合规风险<span class="n">' + RISK.length + ' 处</span></h3>' +
+        RISK.map(function (r) {
+          return '<div class="gap" data-state="miss" id="risk' + r.si + '" style="flex-direction:column;align-items:stretch">' +
+            '<div style="display:flex;align-items:center;gap:8px"><span class="pill pill-red">' + esc(r.cat) + '</span>' +
+            '<b style="color:var(--flag-must)">' + esc(r.n) + '</b><span class="num" style="margin-left:auto;color:var(--ink-muted)">' + esc(r.tc) + '</span></div>' +
+            '<p class="note" style="margin:8px 0 0">' + esc(r.tip) + '</p></div>';
+        }).join('') +
+        '<p class="note" style="margin-top:12px">只标不删。改不改、怎么改，发布前你自己定。</p></div>';
+    }
+    /* judge —— 随步骤变化的「判断」面板 */
+    var c = counts();
+    if (stage === 'diff' || stage === 'paste') {
+      return '<div class="card"><h3>' + ico('check') + '清洗报告<span class="n num">' + c.cut + ' 删 / ' + c.mark + ' 标记 / ' + c.kept + ' 放回</span></h3>' +
+        '<div class="kv"><span>删除句</span><b class="num">' + c.cut + '</b></div>' +
+        '<div class="kv"><span>只标记</span><b class="num">' + c.mark + '</b></div>' +
+        '<div class="kv"><span>人工放回</span><b class="num">' + c.kept + '</b></div>' +
+        '<div class="kv"><span>剩余字数</span><b class="num">' + c.chars + '</b></div>' +
+        '<p class="note" style="margin-top:12px">放回靠「句子指纹」重放，不靠位置补丁——所以你在中栏手动改过字，之前的豁免也不会错位。</p></div>' +
+        '<div class="card"><h3>' + ico('flag') + '故事结构（我 vs 客户）</h3><div class="gaps">' +
+        PARTS.map(function (p) {
+          return '<div class="gap" data-state="' + (p.ok ? 'ok' : 'miss') + '">' +
+            (p.ok ? ico('check') : ico('warn')) + '<b style="color:var(--ink-primary)">' + esc(p.n) + '</b>' +
+            '<span class="note" style="margin-left:auto;text-align:right">' + esc(p.from) + '</span></div>';
+        }).join('') + '</div>' +
+        '<p class="note" style="margin-top:12px"><b>缺「真实细节」</b>：全篇没有场景、动作、物件。翻回 00:45 那句，客户当时在干什么、你手里拿着什么，补一句就够。</p></div>';
+    }
+    if (stage === 'model') {
+      return '<div class="card"><h3>' + ico('copy') + '这一屏要你确认什么</h3>' +
+        '<p class="note">Prompt 包里的<b>硬约束</b>决定大模型会不会替你编数字。这三条不能被它改掉：<br>① 不加文稿外事实；② 不改客户原话；③ 每删一句留痕。</p></div>' +
+        '<div class="card"><h3>' + ico('film') + '成片登记</h3><p class="note">粘贴终稿后自动登记一条成片，并把这条用过的素材「用过次数 +1」——使用次数只从成片反查，不留两个真相源。</p></div>';
+    }
+    if (stage === 'vault') {
+      var used = VAULT.filter(function (v) { return v.used > 0; }).length;
+      return '<div class="card"><h3>' + ico('box') + '库存体检<span class="n num">' + VAULT.length + ' 件</span></h3>' +
+        '<div class="kv"><span>用过</span><b class="num">' + used + '</b></div>' +
+        '<div class="kv"><span>压箱底</span><b class="num">' + (VAULT.length - used) + '</b></div>' +
+        '<div class="kv"><span>平均表现</span><b class="num">' + (VAULT.reduce(function (a, v) { return a + v.perf; }, 0) / used).toFixed(2) + '</b></div>' +
+        '<p class="note" style="margin-top:12px">「真实细节」只有 1 件——这是你最该补的桶，因为它是唯一让片子不像稿子的东西。</p></div>' +
+        '<div class="card"><h3>' + ico('warn') + '查重提醒</h3><p class="note">「报价低不是便宜…」与库内一条实词重合 100%。存之前先确认是不是同一条。</p></div>';
+    }
+    return '<div class="card"><h3>' + ico('check') + '标准</h3><p class="note">三要素与黑名单的改动会立即作用到下一次预清洗，不需要重来一遍。</p></div>';
+  }
+
+  /* 可深链：#diff / #vault / #std / #paste / #model，刷新与分享都回到同一步 */
+  var ORDER = ['std', 'paste', 'diff', 'model', 'vault'];
+  var h = (location.hash || '').replace('#', '');
+  if (ORDER.indexOf(h) >= 0) stage = h;
+  /* ?theme=dark|light 给截图和「想固定一档」的人用 */
+  var th = (location.search.match(/theme=(dark|light)/) || [])[1];
+  if (th) document.documentElement.setAttribute('data-theme', th);
+
+  function syncHash() {
+    if ((location.hash || '').replace('#', '') !== stage) {
+      history.replaceState(null, '', '#' + stage);
+    }
+  }
+  window.addEventListener('hashchange', function () {
+    var s = (location.hash || '').replace('#', '');
+    if (ORDER.indexOf(s) >= 0 && s !== stage) { stage = s; inspTab = 'judge'; draw(); }
+  });
+
+  /* ---------------- 绘制 ---------------- */
+  function draw() {
+    syncHash();
+    document.querySelectorAll('.step[data-stage]').forEach(function (b) {
+      b.setAttribute('aria-current', b.dataset.stage === stage ? 'true' : 'false');
+    });
+    $('deskTitle').textContent = TITLES[stage];
+    $('deskBody').innerHTML = render[stage]();
+    $('inspBody').innerHTML = inspHtml();
+    ['tab-judge', 'tab-risk', 'tab-why'].forEach(function (id) {
+      $(id).setAttribute('aria-selected', id === 'tab-' + inspTab ? 'true' : 'false');
+    });
+    $('inspBody').setAttribute('aria-labelledby', 'tab-' + inspTab);
+    syncBar();
+  }
+
+  /* ---------------- 交互 ---------------- */
+  var ACT = {
+    restore: function (el) {
+      var i = +el.dataset.i; S[i].st = 'kept';
+      draw(); toast('第 ' + (i + 1) + ' 句已放回（句子指纹已记录，改字不错位）');
+    },
+    drop: function (el) { var i = +el.dataset.i; S[i].st = 'cut'; draw(); toast('已删整句'); },
+    keep: function (el) { var i = +el.dataset.i; S[i].st = 'kept'; draw(); toast('留着——它不属于自动删除范围'); },
+    flag: function (el) { var i = +el.dataset.i; S[i].st = 'mark'; S[i].why = '人工标记待删'; draw(); toast('已标记【待删】', 'warn'); },
+    risk: function (el) {
+      /* 词 → 句子下标 → 检视器里那条风险的 id；不拿文字去猜，改文案就失效 */
+      inspTab = 'risk'; draw();
+      var node = $('risk' + el.dataset.i);
+      if (node) { node.setAttribute('tabindex', '-1'); node.focus({ preventScroll: true }); node.scrollIntoView({ block: 'nearest' }); }
+      else toast('这条风险不在当前风险面板里');
+    },
+    'to-diff': function () { stage = 'diff'; inspTab = 'judge'; draw(); toast('预清洗完成：5 句被删，2 句只标记，先逐句核对'); },
+    'finish-diff': function () {
+      var c = counts();
+      if (c.todo) { toast('还有 ' + c.todo + ' 处没核对，Prompt 包会带上未处理的句子', 'warn'); stage = 'diff'; draw(); return; }
+      stage = 'model'; inspTab = 'judge'; draw(); toast('清洗稿已冻结，Prompt 包按最新标准生成');
+    },
+    'to-vault': function () { stage = 'vault'; inspTab = 'judge'; draw(); toast('成片记录已登记，本条用过的 5 件素材用过次数 +1'); },
+    bucket: function (el) { bucket = el.dataset.b; draw(); },
+    star: function (el) {
+      var i = +el.dataset.i, n = +el.dataset.n;
+      TAKES[i].star = n; TAKES[i].lines = '本条用了 ' + (n + 1) + ' 件素材';
+      VAULT.forEach(function (v) { if (v.used > 0) v.perf = Math.max(1, Math.min(5, +(v.perf * 0.8 + n * 0.2).toFixed(1))); });
+      draw(); toast('已打 ' + n + ' 星，均分回流到「客户原话」「带数字的结果」等 ' + TAKES[i].src + ' 桶');
+    },
+    sample: function () { toast('示例稿已载入（原型里是静态文本，产品里会真的灌进稿纸）'); },
+    sample2: function () { bucket = '全部'; stage = 'paste'; inspTab = 'judge'; draw(); toast('已切到第 2 步：粘上示例稿，再回来就能看到素材'); },
+    'clear-raw': function () { toast('文稿已清空（标准与素材库保留）'); },
+    'vault-add': function () { toast('手记一条素材时会做查重：实词重合 ≥ 50% 才提醒，只共享句式框架的不算重复'); },
+    copy: function (el) { toast('已复制' + el.dataset.what); },
+    dl: function () { toast('浏览器已拦截本页的下载演示——原型不落地文件'); },
+    'open-settings': function () { openDrawer(); },
+    'close-settings': function () { closeDrawer(); },
+    'del-word': function (el) { toast('「' + el.dataset.w + '」已从黑名单移除'); el.closest('.chip').remove(); },
+    'add-word': function () {
+      var v = ($('newWord').value || '').trim();
+      if (!v) { toast('先写要删的类型', 'warn'); $('newWord').focus(); return; }
+      toast('已加入黑名单：' + v); $('newWord').value = '';
+    },
+    'vault-edit': function () { toast('改桶：把这条挪到「冲突 / 我的动作 / 客户原话…」，用下拉，不靠拖'); },
+    'take-load': function () { stage = 'diff'; inspTab = 'judge'; draw(); toast('已载入这篇成片对应的清洗稿'); }
+  };
+
+  /* 「清空库存」用内联二次确认，不弹 confirm() */
+  function inlineConfirm(el, cb) {
+    if (el.getAttribute('data-armed') === 'true') { cb(); el.removeAttribute('data-armed'); el.innerHTML = ico('trash') + '清空库存'; return; }
+    el.setAttribute('data-armed', 'true');
+    el.innerHTML = ico('warn') + '确认清空？';
+    toast('再点一次才真的清空（10 秒内不点就自动取消）', 'warn');
+    setTimeout(function () {
+      if (el.getAttribute('data-armed') === 'true') { el.removeAttribute('data-armed'); el.innerHTML = ico('trash') + '清空库存'; }
+    }, 10000);
+  }
+
+  document.addEventListener('click', function (e) {
+    var el = e.target.closest('[data-act]');
+    if (!el) return;
+    var act = el.dataset.act;
+    if (act === 'vault-clear') { inlineConfirm(el, function () { VAULT.length = 0; draw(); toast('库存已清空'); }); return; }
+    if (ACT[act]) { ACT[act](el); }
+  });
+
+  document.addEventListener('change', function (e) {
+    if (e.target.name === 'blm') toast(e.target.value === 'delete' ? '黑名单改成「整句删除」，已核对过的豁免会作废并提示重跑' : '黑名单改成「只标记」，不删任何字', 'warn');
+  });
+
+  /* 句行 Enter：焦点在行本身时放回/撤回，不抢空格（空格要留给滚动） */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+      var row = document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('srow') ? document.activeElement : null;
+      if (row) {
+        var i = +row.dataset.i;
+        if (S[i].st === 'cut') ACT.restore(row); else if (S[i].st === 'kept') { S[i].st = 'cut'; draw(); toast('第 ' + (i + 1) + ' 句撤回删除'); }
+        var again = document.querySelector('.srow[data-i="' + i + '"]');
+        if (again) { again.setAttribute('tabindex', '-1'); again.focus({ preventScroll: true }); }
+        e.preventDefault();
+      }
+    }
+    if (e.altKey && '12345'.indexOf(e.key) >= 0) {
+      stage = ['std', 'paste', 'diff', 'model', 'vault'][+e.key - 1]; inspTab = 'judge'; draw();
+      $('desk').focus({ preventScroll: true });
+      e.preventDefault();
+    }
+    if (e.key === 'Escape' && $('drawer').getAttribute('data-open') === 'true') closeDrawer();
+  });
+
+  /* 检视器 tab（中栏的事件走全局 data-act 代理） */
+  document.querySelectorAll('.itab').forEach(function (t) {
+    t.addEventListener('click', function () { inspTab = t.id.replace('tab-', ''); draw(); });
+  });
+
+  /* 抽屉 */
+  function openDrawer() {
+    lastFocus = document.activeElement;
+    $('drawerBody').innerHTML = render.std();
+    $('drawer').setAttribute('data-open', 'true');
+    $('scrim').setAttribute('data-open', 'true');
+    var first = $('drawer').querySelector('button, input');
+    if (first) first.focus();
+  }
+  function closeDrawer() {
+    $('drawer').setAttribute('data-open', 'false');
+    $('scrim').setAttribute('data-open', 'false');
+    if (lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+  $('scrim').addEventListener('click', closeDrawer);
+  document.querySelectorAll('[data-act="open-settings"]').forEach(function (b) {
+    b.addEventListener('click', openDrawer);
+  });
+
+  /* 主题：auto → light → dark 循环 */
+  var THEMES = [['auto', 'i-auto', '跟随系统'], ['light', 'i-sun', '日稿'], ['dark', 'i-moon', '夜稿']];
+  var ti = 0;
+  $('btnTheme').addEventListener('click', function () {
+    ti = (ti + 1) % THEMES.length;
+    document.documentElement.setAttribute('data-theme', THEMES[ti][0]);
+    $('btnTheme').querySelector('use').setAttribute('href', '#' + THEMES[ti][1]);
+    $('btnTheme').setAttribute('aria-label', '切换主题：当前为' + THEMES[ti][2]);
+    toast('主题：' + THEMES[ti][2]);
+  });
+
+  /* 让句子行可以纯键盘走到（Tab 进句子 → Enter 放回） */
+  var obs = new MutationObserver(function () {
+    document.querySelectorAll('.srow').forEach(function (r) { if (!r.hasAttribute('tabindex')) r.setAttribute('tabindex', '0'); });
+  });
+  obs.observe($('deskBody'), { childList: true, subtree: true });
+
+  draw();
+  document.title = '稿纸台 · 原型 · ' + (counts().todo ? counts().todo + ' 处待判' : '已核对');
+})();
+</script>
+</body>
+</html>

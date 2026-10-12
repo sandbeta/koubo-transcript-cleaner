@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><title>UI audit harness</title></head>
+<body>
+<pre id="auditOut">running…</pre>
+<iframe id="f" style="width:1500px;height:2400px;border:0"></iframe>
+<script>
+/* 独立审计台：把工具装进 iframe，量真实几何与有效背景色。不修改被审文件。
+   默认审产品；`?target=其它页面.html` 可审原型/别页（同一套口径才叫前后对比）。 */
+const TARGET = new URLSearchParams(location.search).get('target') || 'koubo-transcript-cleaner.html?demo=1';
+const L = [];
+const push = s => L.push(s);
+
+function lum(rgb) {
+  const m = rgb.match(/[\d.]+/g);
+  if (!m) return null;
+  const [r, g, b] = m.slice(0, 3).map(v => {
+    const c = v / 255;
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+function alpha(rgb) { const m = rgb.match(/rgba\(([\d.,\s]+)\)/); if (m) { const p = m[1].split(','); return +(p[3] || 1); } return 1; }
+function effBg(el) {
+  let n = el;
+  while (n && n.nodeType === 1) {
+    const cs = getComputedStyle(n);
+    const bg = cs.backgroundColor;
+    if (bg && bg !== 'transparent' && alpha(bg) > 0.85) return bg;
+    n = n.parentElement;
+  }
+  return 'rgb(255, 255, 255)';
+}
+function contrast(fg, bg) {
+  const a = lum(fg), b = lum(bg);
+  if (a == null || b == null) return null;
+  const [x, y] = [a, b].sort((m, n) => n - m);
+  return (x + 0.05) / (y + 0.05);
+}
+
+function visible(el) {
+  const cs = getComputedStyle(el);
+  if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+  if (+cs.opacity === 0 && !el.closest('label')) return false;   /* 视觉隐藏但由 label 承接命中的除外 */
+  return el.getClientRects().length > 0;
+}
+
+function run(doc) {
+  const win = doc.defaultView;
+
+  /* ---------- 1. 点击目标真实尺寸 ---------- */
+  push('== 1. 点击目标真实尺寸（WCAG 2.2 SC 2.5.8：web ≥ 24 CSS px）==');
+  const targets = [...doc.querySelectorAll('button, input, select, textarea, a[href], [role="button"], .pick, .mini')].filter(visible);
+  const small = [];
+  const seen = new Set();
+  targets.forEach(el => {
+    /* WCAG 量的是「可指点区域」：被 <label> 包住的控件，命中区是整个 label，不是 input 本体那 18px */
+    const wrap = el.closest ? el.closest('label') : null;
+    const hit = (el.tagName === 'INPUT' && wrap) ? wrap : el;
+    const r = hit.getBoundingClientRect();
+    const h = Math.round(r.height * 10) / 10, w = Math.round(r.width * 10) / 10;
+    const label = (el.textContent || el.type || '').replace(/\s+/g, ' ').trim().slice(0, 10) || el.type;
+    const key = (el.className || el.tagName) + '|' + label;
+    if (h < 24 || w < 24) {
+      if (!seen.has(key)) {
+        seen.add(key);
+        small.push({ h, w, cls: String(el.className || el.tagName).slice(0, 26), label, tag: el.tagName, via: hit !== el ? '（label 命中区）' : '' });
+      }
+    }
+  });
+  if (!small.length) push('  全部达标');
+  small.slice(0, 14).forEach(s => push('  BAD ' + String(s.h).padStart(5) + '×' + String(s.w).padEnd(6) + ' <' + s.tag + ' .' + s.cls + '> "' + s.label + '" ' + s.via));
+  push('  过小控件种类数: ' + small.length + ' / 交互控件总数 ' + targets.length);
+
+  /* ---------- 2. 真实文本对比度（按 computed color × 有效背景） ---------- */
+  push('\n== 2. 文本对比度实测（computed color × 向上找到的有效背景）==');
+  const groups = {};
+  [...doc.querySelectorAll('body *')].forEach(el => {
+    if (!el.textContent || el.children.length > 0) return;   // 只看叶子文本节点
+    if (!visible(el)) return;                                 // 没真的渲染出来的不算
+    const cs = getComputedStyle(el);
+    const fs = parseFloat(cs.fontSize);
+    if (fs < 9) return;
+    const c = contrast(cs.color, effBg(el));
+    if (c == null) return;
+    const k = cs.color + ' on ' + effBg(el) + ' @' + fs + 'px';
+    const big = fs >= 24 || (fs >= 18.66 && parseFloat(cs.fontWeight) >= 700);
+    const need = big ? 3 : 4.5;
+    if (!groups[k] || groups[k].r > c) groups[k] = { r: c, need, cls: (el.className || el.tagName).toString().slice(0, 22), n: 0 };
+    groups[k].n++;
+  });
+  Object.entries(groups).sort((a, b) => a[1].r - b[1].r).slice(0, 16).forEach(([k, v]) => {
+    push('  ' + (v.r >= v.need ? 'OK  ' : 'BAD ') + v.r.toFixed(2) + ':1 (需' + v.need + ') ' + k + '  .' + v.cls);
+  });
+
+  /* ---------- 3. 字号真实分布 ---------- */
+  push('\n== 3. 渲染后字号分布 ==');
+  const dist = {};
+  [...doc.querySelectorAll('body *')].forEach(el => {
+    if (!el.textContent.trim() || el.children.length > 0) return;
+    const fs = parseFloat(getComputedStyle(el).fontSize);
+    dist[fs] = (dist[fs] || 0) + 1;
+  });
+  Object.keys(dist).map(Number).sort((a, b) => a - b).forEach(s =>
+    push('  ' + (s < 12 ? '⚠ ' : '  ') + s + 'px × ' + dist[s]));
+
+  /* ---------- 4. 键盘可达性 / 焦点 ---------- */
+  push('\n== 4. 键盘与焦点 ==');
+  const styleText = [...doc.querySelectorAll('style')].map(s => s.textContent).join('');
+  push('  :focus-visible 规则数: ' + (styleText.match(/:focus-visible/g) || []).length);
+  push('  outline 重置为 none 的次数: ' + (styleText.match(/outline:\s*none/g) || []).length);
+  push('  aria-* 属性数: ' + doc.querySelectorAll('[aria-hidden],[aria-label],[aria-live],[aria-describedby],[role]').length);
+  push('  <label for> 关联数: ' + doc.querySelectorAll('label[for]').length + '，表单控件数: ' + doc.querySelectorAll('input,textarea').length);
+  const nameOf = el => (el.getAttribute('aria-label') || '').trim()
+    || (el.labels && el.labels.length ? 'label' : '')
+    || (el.textContent || '').trim()
+    || (el.getAttribute('title') || '').trim();
+  const noName = [...doc.querySelectorAll('button, input, textarea, select, a[href]')]
+    .filter(el => !nameOf(el));
+  push('  无可访问名称的控件: ' + noName.length + (noName.length ? '  ⚠ ' + noName.slice(0, 4).map(e => e.tagName + '#' + (e.id || e.className)).join(', ') : '  OK'));
+  const fields = [...doc.querySelectorAll('input, textarea')];
+  push('  表单控件名称来源：显式 label[for] ' + fields.filter(e => e.labels && e.labels.length && !e.closest('label')).length +
+    ' · 包裹式 label ' + fields.filter(e => e.closest('label')).length +
+    ' · aria-label ' + fields.filter(e => e.getAttribute('aria-label')).length +
+    ' / 共 ' + fields.length + ' 个');
+  push('  仅靠 placeholder 当标签的控件: ' + fields.filter(e => !(e.labels && e.labels.length) && !e.getAttribute('aria-label')).length);
+  push('  状态提示容器 role/aria-live: ' + (doc.getElementById('toast') ? (doc.getElementById('toast').getAttribute('role') || doc.getElementById('toast').getAttribute('aria-live') || '无') : '?'));
+  // 实测：Tab 能不能走到动态渲染出来的「放回」按钮
+  const restore = doc.querySelector('#reportBody [data-act="restore"]');
+  push('  动态按钮是原生 <button>（可 Tab）: ' + (restore ? restore.tagName === 'BUTTON' : 'n/a'));
+
+  /* ---------- 5. 布局：列高差与横向溢出 ---------- */
+  push('\n== 5. 布局实测 ==');
+  const cols = [...doc.querySelectorAll('.grid .col')];
+  if (cols.length === 2) {
+    const a = cols[0].getBoundingClientRect().height, b = cols[1].getBoundingClientRect().height;
+    push('  左栏 ' + Math.round(a) + 'px / 右栏 ' + Math.round(b) + 'px → 右栏下方空档 ' + Math.round(a - b) + 'px（' + Math.round((a - b) / a * 100) + '%）');
+  }
+  /* 原型稿（稿纸台）走 rail / desk / inspector 三栏，口径另开一条 */
+  const rail = doc.querySelector('.rail'), desk = doc.querySelector('.desk'), insp = doc.querySelector('.inspector');
+  if (rail && desk && insp) {
+    const w = e => Math.round(e.getBoundingClientRect().width);
+    const ms = doc.querySelector('.ms');
+    const firstRow = doc.querySelector('.srow .tx');
+    push('  三栏宽：rail ' + w(rail) + ' · desk ' + w(desk) + ' · inspector ' + w(insp) + '（视口 ' + Math.round(win.innerWidth) + '）');
+    if (ms) {
+      const mw = Math.round(ms.getBoundingClientRect().width);
+      const one = firstRow ? parseFloat(getComputedStyle(firstRow).fontSize) : 18;
+      push('  稿纸正文实宽 ' + mw + 'px ≈ ' + Math.round(mw / one) + ' 个 ' + one + 'px 汉字/行（设计目标 38）');
+    }
+    /* 首屏视觉落点：面积最大且反差最高的块应该是稿纸，不是配置卡 */
+    const sheet = doc.querySelector('.sheet');
+    if (sheet) push('  稿纸面占中栏面积 ' + Math.round(sheet.getBoundingClientRect().width / Math.max(1, w(desk)) * 100) + '%');
+  }
+  push('  页面总高: ' + Math.round(doc.documentElement.scrollHeight) + 'px');
+  [1500, 1280, 1024, 820, 500].forEach(w => {
+    f.style.width = w + 'px';
+    doc.documentElement.style.zoom = '';
+    void doc.body.offsetWidth;
+    const sw = doc.documentElement.scrollWidth, cw = doc.documentElement.clientWidth;
+    push('  视口 ' + String(w).padStart(4) + 'px → scrollWidth ' + sw + (sw > cw + 1 ? '  ⚠ 横向溢出' : '  OK'));
+  });
+
+  /* ---------- 6. Emoji 图标使用位置 ---------- */
+  push('\n== 6. Emoji 当图标的位置 ==');
+  const emo = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+  [...doc.querySelectorAll('h1,h2,h3,button,.rh,.btn')].forEach(el => {
+    const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('');
+    if (emo.test(own) || emo.test(el.textContent.slice(0, 14))) {
+      if (el.children.length <= 2) push('  ' + el.tagName + '.' + (el.className || '').slice(0, 14) + ' → ' + el.textContent.replace(/\s+/g, ' ').trim().slice(0, 26));
+    }
+  });
+
+  /* ---------- 6b. 图标体系：残留 emoji / SVG 覆盖 / use 引用是否失效 ---------- */
+  push('\n== 6b. 图标体系 ==');
+  const emo2 = /[\u{1F000}-\u{1FAFF}\u{2300}-\u{23FF}\u{2600}-\u{26FF}\u{2B00}-\u{2BFF}\u{FE0F}]/u;
+  let bad = 0;
+  [...doc.querySelectorAll('h1,h2,h3,button,.rh,.btn,.mini')].forEach(el => {
+    const own = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('');
+    if (emo2.test(own)) { bad++; push('  BAD ' + el.tagName + '.' + (el.className || '').slice(0, 16) + ' → ' + own.replace(/\s+/g, ' ').trim().slice(0, 24)); }
+  });
+  push('  标题/按钮里残留彩色 emoji: ' + bad + ' 处' + (bad ? ' ⚠' : '  OK'));
+  const svgs = [...doc.querySelectorAll('svg')];
+  push('  内联 SVG 图标: ' + svgs.length + ' 个，带 aria-hidden 的: ' + svgs.filter(s => s.getAttribute('aria-hidden') === 'true').length);
+  push('  <use> 引用: ' + doc.querySelectorAll('use').length + ' 个，符号表 symbol: ' + doc.querySelectorAll('symbol').length + ' 个');
+  const zero = svgs.filter(s => {
+    if (s.getAttribute('width') === '0') return false;         // 符号表容器本来就是 0×0，不是失效
+    const r = s.getBoundingClientRect();
+    return r.width === 0 || r.height === 0;
+  });
+  push('  渲染尺寸为 0 的 SVG（use 引用失败会变 0）: ' + zero.length + (zero.length ? '  ⚠' : '  OK'));
+
+  /* ---------- 7. 动效与减动偏好 ---------- */
+  push('\n== 7. 动效 ==');
+  push('  transition 规则数: ' + (styleText.match(/transition:/g) || []).length);
+  push('  @media (prefers-reduced-motion): ' + (styleText.match(/prefers-reduced-motion/g) || []).length);
+  push('  0ms 立即切换的可疑处（无 transition 的状态类）: .cleanWrap display 切换 = 有，报告/面板插入 = 无动画（可接受）');
+}
+
+const f = document.getElementById('f');
+f.addEventListener('load', () => {
+  setTimeout(() => {
+    try {
+      const doc = f.contentDocument;
+      /* 就绪判据不能写死产品的某个 id——审原型时它没有 cleanText，会误报「iframe 未就绪」 */
+      if (!doc || !doc.body || !doc.body.children.length) { document.getElementById('auditOut').textContent = 'iframe 未就绪（可能同源被拦）'; return; }
+      run(doc);
+      document.getElementById('auditOut').textContent = L.join('\n');
+    } catch (e) {
+      document.getElementById('auditOut').textContent = 'THREW ' + e.message + '\n' + L.join('\n');
+    }
+  }, 900);
+});
+f.src = TARGET;
+</script>
+</body>
+</html>

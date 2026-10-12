@@ -1,0 +1,4409 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>口播文字稿整理工具 v2.0</title>
+<style>
+  * { box-sizing: border-box; }
+
+  /* ---------- 语义色令牌：所有前景色都需对白底/浅灰底 ≥4.5:1 ---------- */
+  :root {
+    --bg-page: #f3f5fa;
+    --bg-card: #ffffff;
+    --bg-sub: #f8fafc;
+    --text-1: #1f2733;   /* 正文 15:1 */
+    --text-2: #5b6478;   /* 次级说明 6.5:1 */
+    --text-3: #6b7280;   /* 弱化提示 4.8:1（原 #98a1b3 只有 2.6:1） */
+    --text-ph: #6b7280;  /* placeholder 同样要过 4.5:1 */
+    --accent: #2563eb;
+    --accent-ink: #1d4fd0;
+    --ok: #15803d;
+    --ok-solid: #15803d;  /* 绿底白字：#12b76a 只有 2.62:1，#0a8a4f 4.41:1，这个到 5.0:1 */
+    --hit: #b45309;       /* 命中计数橙：原 #d97706 只有 3.19:1 */
+    --bad: #b42318;
+    --line: #e6e9f2;
+    --line-soft: #eef1f6;
+    --focus: #2563eb;
+  }
+
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; border: 0;
+  }
+
+  /* 图标：一律内联 SVG + currentColor，跟随文字色，不用 emoji（跨平台字形不可控） */
+  .ic {
+    width: 15px; height: 15px; flex: 0 0 auto;
+    display: inline-block; vertical-align: -2px;
+  }
+  .btn .ic { width: 14px; height: 14px; }
+  .card > h2 .ic { width: 16px; height: 16px; }
+  .report > .rh .ic { width: 15px; height: 15px; }
+
+  /* 键盘焦点：所有可操作控件都要看得见（输入框另有 :focus 蓝环，打字时常亮是合理的） */
+  a:focus-visible, button:focus-visible, [tabindex]:focus-visible,
+  input[type=checkbox]:focus-visible, input[type=radio]:focus-visible, .seg label:has(input:focus-visible) {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      transition-duration: .01ms !important;
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+    }
+    .btn:active { transform: none; }
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #f3f5fa;
+    color: #1f2733;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", "Source Han Sans SC", sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .wrap {
+    max-width: 1720px;
+    margin: 0 auto;
+    padding: 18px 22px 40px;
+  }
+
+  /* ---------- 顶部标题 ---------- */
+  .app-head {
+    background: #ffffff;
+    border: 1px solid #e6e9f2;
+    border-radius: 14px;
+    padding: 18px 22px;
+    box-shadow: 0 1px 2px rgba(31, 39, 51, .04);
+  }
+  .app-head h1 {
+    margin: 0;
+    font-size: 21px;
+    font-weight: 800;
+    letter-spacing: .3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .app-head .logo {
+    width: 22px; height: 22px; flex: 0 0 auto;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 10px;
+    border-radius: 999px;
+    background: var(--ok-solid);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .2px;
+  }
+  .app-head p {
+    margin: 6px 0 0 32px;
+    color: var(--text-3);
+    font-size: 13px;
+  }
+
+  /* ---------- 状态条 ---------- */
+  .statusbar {
+    margin-top: 16px;
+    background: #fdf7e3;
+    border: 1px solid #f0dfa6;
+    border-radius: 11px;
+    padding: 9px 14px;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    font-size: 13px;
+    color: #6b6247;
+  }
+  .statusbar .ok { color: #15803d; font-weight: 700; }
+  .statusbar b { color: #4b5563; font-weight: 700; }
+  .count {
+    display: inline-block;
+    min-width: 26px;
+    text-align: center;
+    padding: 0 6px;
+    background: #fff;
+    border: 1px solid #e2d8b3;
+    border-radius: 6px;
+    font-weight: 700;
+    color: #1f2733;
+    font-variant-numeric: tabular-nums;
+  }
+  .statusbar .spacer { flex: 1 1 auto; }
+
+  /* ---------- 布局 ---------- */
+  .grid {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.06fr);
+    gap: 18px;
+    align-items: start;
+  }
+  .col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+
+  .card {
+    background: #fff;
+    border: 1px solid #e6e9f2;
+    border-radius: 14px;
+    padding: 18px 20px 20px;
+    box-shadow: 0 1px 2px rgba(31, 39, 51, .04);
+  }
+  .card > h2 {
+    margin: 0 0 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #eef1f6;
+    font-size: 16px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card > h2 .ico { font-size: 15px; }
+
+  /* ---------- 三要素 / 黑名单 子块 ---------- */
+  .sub {
+    background: #f8fafc;
+    border: 1px solid #edf0f6;
+    border-radius: 11px;
+    padding: 13px 14px 14px;
+    margin-bottom: 14px;
+  }
+  .sub:last-child { margin-bottom: 0; }
+  .sub-title {
+    font-size: 14px;
+    font-weight: 800;
+    margin-bottom: 9px;
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .sub-title .hint { font-size: 12px; font-weight: 400; color: var(--text-3); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 11px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #eaf1ff;
+    border: 1px solid #d7e4ff;
+    color: #2563eb;
+    border-radius: 7px;
+    padding: 3px 7px 3px 9px;
+    font-size: 12.5px;
+    font-weight: 600;
+    max-width: 100%;
+  }
+  .chip span.txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip button {
+    border: 0; background: transparent; color: var(--text-2);
+    cursor: pointer; font-size: 15px; line-height: 1;
+    min-width: 24px; min-height: 24px;   /* WCAG 2.2 最小目标尺寸 */
+    border-radius: 5px;
+  }
+  .chip button:hover { color: #dc2626; background: #dbeafe; }
+  .chip.empty { background: #f1f3f7; border-color: #e6e9f2; color: var(--text-3); font-weight: 500; }
+
+  .row { display: flex; gap: 9px; align-items: stretch; }
+  input[type=text], textarea {
+    font-family: inherit;
+    font-size: 13.5px;
+    color: #1f2733;
+    background: #fff;
+    border: 1px solid #dde3ee;
+    border-radius: 9px;
+    padding: 8px 11px;
+    outline: none;
+    width: 100%;
+  }
+  input[type=text]:focus, textarea:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,.10); }
+  input::placeholder, textarea::placeholder { color: var(--text-ph); letter-spacing: .5px; }
+
+  .btn {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 9px;
+    padding: 8px 15px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    transition: background .12s, border-color .12s, color .12s, transform .05s;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn-ghost { background: #fff; border: 1px solid #c7d7f7; color: #2563eb; }
+  .btn-ghost:hover { background: #eff5ff; border-color: #9dbdf5; }
+  .btn-primary { background: #2563eb; border: 1px solid #2563eb; color: #fff; }
+  .btn-primary:hover { background: #1d4fd0; border-color: #1d4fd0; }
+  .btn-quiet { background: #fff; border: 1px solid #dde3ee; color: #5b6478; font-weight: 600; }
+  .btn-quiet:hover { background: #f5f7fb; color: #1f2733; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .row .btn { flex: 0 0 auto; }
+
+  /* ---------- 复选规则 ---------- */
+  .rules { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .rule {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: #39414f; cursor: pointer; user-select: none;
+    min-height: 28px;
+  }
+  .rule input { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; margin: 0; flex: 0 0 auto; }
+  .rule .hint { color: var(--text-3); font-size: 12px; }
+
+  .seg { display: inline-flex; border: 1px solid #dde3ee; border-radius: 9px; overflow: hidden; }
+  .seg label { padding: 5px 11px; font-size: 12.5px; color: #5b6478; cursor: pointer; background: #fff; }
+  .seg input { display: none; }
+  .seg input:checked + span { color: #2563eb; font-weight: 700; }
+  .seg label:has(input:checked) { background: #eff5ff; }
+  .seg label + label { border-left: 1px solid #dde3ee; }
+
+  /* ---------- 文本域 ---------- */
+  textarea { resize: vertical; min-height: 120px; line-height: 1.7; }
+  .ta-dash { border: 1px dashed #dbe1ec; background: #fcfdfe; }
+  #finalText, #promptText { min-height: 300px; }
+  #promptText { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Courier New", monospace; font-size: 12.5px; }
+  #rawText { min-height: 170px; }
+  #cleanText { min-height: 170px; }
+
+  .meta {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+    margin: 10px 0 12px; font-size: 12.5px; color: var(--text-3);
+  }
+  .meta .k { color: #1f2733; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+
+  /* ---------- 清洗报告 ---------- */
+  .report { margin-top: 14px; border: 1px solid #e9edf5; border-radius: 11px; overflow: hidden; }
+  .report > .rh {
+    background: #f8fafc; padding: 9px 13px; font-size: 13px; font-weight: 800;
+    border-bottom: 1px solid #e9edf5; display: flex; align-items: center; gap: 8px;
+  }
+  .report-body { padding: 12px 13px; }
+  .rline {
+    display: grid; grid-template-columns: 132px 46px 1fr; gap: 10px;
+    align-items: start; padding: 6px 0; border-bottom: 1px dashed #eef1f6; font-size: 12.5px;
+  }
+  .rline:last-child { border-bottom: 0; }
+  .rline .nm { color: #39414f; font-weight: 700; }
+  .rline .ct { text-align: right; font-variant-numeric: tabular-nums; font-weight: 800; }
+  .rline .ct.hit { color: var(--hit); }
+  .rline .ct.zero { color: var(--text-3); font-weight: 600; }
+  .rline .ex { color: var(--text-3); word-break: break-all; }
+  .rline .ex s { color: #c0392b; text-decoration-color: rgba(192,57,43,.45); }
+  .rline .ex em { color: #15803d; font-style: normal; font-weight: 700; }
+
+  .gems { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .gem {
+    border: 1px solid #e9edf5; border-left: 3px solid #2563eb; border-radius: 8px;
+    padding: 8px 11px; font-size: 12.5px; background: #fcfdff;
+  }
+  .gem .gt { color: #1f2733; }
+  .gem .gs { margin-top: 4px; color: var(--text-3); font-size: 12px; display: flex; flex-wrap: wrap; gap: 5px 10px; align-items: center; }
+  .gem .score { color: #2563eb; font-weight: 800; }
+  .gem .pick { color: #2563eb; font-weight: 700; cursor: pointer; text-decoration: underline; }
+
+  .note { font-size: 12px; color: var(--text-3); margin-top: 9px; }
+  .tip { font-size: 12px; color: var(--text-3); margin-top: 2px; }
+  .warn { color: var(--hit); }
+
+  footer.foot {
+    margin-top: 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+    padding-top: 14px; border-top: 1px solid #e2e6f0; font-size: 12px; color: var(--text-2);
+  }
+  footer.foot .spacer { flex: 1 1 auto; }
+  .kbd-hint { font-size: 12px; color: var(--text-3); }
+  .kbd-hint kbd {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px; font-weight: 700; background: #fff; color: var(--text-2);
+    border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px;
+  }
+
+  /* ---------- 合规风险 ---------- */
+  .risk-item {
+    border: 1px solid #f1d9c2; border-left: 3px solid #d97706; background: #fffbf5;
+    border-radius: 8px; padding: 9px 11px; font-size: 12.5px; margin-bottom: 8px;
+  }
+  .risk-item.high { border-color: #f3c9c4; border-left-color: #dc2626; background: #fff7f6; }
+  .risk-item .rw { font-weight: 800; color: #b45309; }
+  .risk-item.high .rw { color: #b42318; }
+  .risk-item .rs { color: #6b7280; margin-top: 3px; }
+  .risk-item .rf { margin-top: 4px; color: #15803d; }
+  .risk-item .rcat {
+    display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 5px;
+    background: #fef3c7; color: #92400e; margin-left: 6px; font-weight: 700;
+  }
+  .risk-item.high .rcat { background: #fee2e2; color: #991b1b; }
+
+  /* ---------- 故事零件 ---------- */
+  .parts { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; margin-bottom: 12px; }
+  .part {
+    border: 1px solid #e9edf5; border-radius: 8px; padding: 8px 9px; background: #fcfdff;
+    font-size: 12px; position: relative;
+  }
+  .part .pn { font-weight: 800; color: #39414f; }
+  .part .pr { color: var(--text-3); font-size: 12px; margin-top: 1px; }
+  .part .pc { position: absolute; right: 9px; top: 7px; font-size: 15px; font-weight: 800; color: #2563eb; font-variant-numeric: tabular-nums; }
+  .part.zero { background: #fff8f7; border-color: #f3d3ce; }
+  .part.zero .pc { color: #dc2626; }
+  .gap {
+    border: 1px dashed #f0c9a8; background: #fffaf3; border-radius: 8px;
+    padding: 9px 11px; font-size: 12.5px; margin-bottom: 8px;
+  }
+  .gap.high { border-color: #f3c9c4; background: #fff7f6; }
+  .gap.ok { border-style: solid; border-color: #cdebd8; background: #f6fdf9; }
+  .gap .gseg { font-weight: 600; color: var(--text-3); font-size: 12px; }
+  .psel {
+    font-family: inherit; font-size: 12px; color: var(--text-2); background: #fff;
+    border: 1px solid #dde3ee; border-radius: 7px; padding: 4px 6px; min-height: 28px; cursor: pointer;
+  }
+  .gap .gw { font-weight: 800; color: #1f2733; }
+  .gap .gwhy { color: #6b7280; margin-top: 3px; }
+  .gap .ghow { color: #15803d; margin-top: 3px; }
+  .gap .fixes { margin-top: 7px; display: flex; flex-direction: column; gap: 5px; }
+  .fixrow {
+    display: flex; gap: 8px; align-items: flex-start; background: #fff;
+    border: 1px solid #e6e9f2; border-radius: 7px; padding: 6px 8px; font-size: 12px;
+  }
+  .fixrow .ftx { flex: 1 1 auto; min-width: 0; color: #39414f; }
+  .fixrow .fsim { color: var(--text-3); font-size: 12px; }
+
+  /* ---------- 迷你操作按钮 ---------- */
+  .mini {
+    border: 1px solid #c7d7f7; background: #fff; color: var(--accent); border-radius: 7px;
+    font-size: 12px; font-weight: 700; padding: 5px 11px; cursor: pointer; white-space: nowrap;
+    font-family: inherit; min-height: 28px;   /* 实测原为 21px，低于 web 24px 下限 */
+  }
+  .mini:hover { background: #eff5ff; }
+  .mini.warn { border-color: #f0c9a8; color: #b45309; }
+  .mini.warn:hover { background: #fff7ed; }
+  .keptback { color: #15803d; font-weight: 700; }
+
+  /* ---------- 素材库 ---------- */
+  .vault-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 12px; }
+  .vault-bar .stat { font-size: 12.5px; color: var(--text-3); }
+  .vault-bar .stat b { color: #1f2733; font-variant-numeric: tabular-nums; }
+  .vgroup { margin-bottom: 14px; }
+  .vgroup > h3 {
+    margin: 0 0 7px; font-size: 13px; font-weight: 800; color: #39414f;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .vgroup > h3 .cnt { font-size: 12px; color: var(--text-3); font-weight: 600; }
+  .vitem {
+    border: 1px solid #e9edf5; border-radius: 8px; padding: 8px 10px; margin-bottom: 7px;
+    font-size: 12.5px; background: #fff; display: flex; gap: 10px; align-items: flex-start;
+  }
+  .vitem.unused { border-left: 3px solid var(--ok-solid); background: #f7fefb; }
+  .vitem.duped { border-left: 3px solid #d97706; }
+  .vitem .vtx { flex: 1 1 auto; min-width: 0; color: #1f2733; word-break: break-word; }
+  .vitem .vmeta { color: var(--text-3); font-size: 12px; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px 10px; }
+  .vitem .vtag { background: #eef4ff; color: #2563eb; border-radius: 4px; padding: 0 5px; font-weight: 700; }
+  .vitem .vops { display: flex; flex-direction: column; gap: 5px; flex: 0 0 auto; }
+  .vempty { color: var(--text-3); font-size: 12.5px; padding: 10px 0; }
+  .badge {
+    display: inline-block; font-size: 12px; font-weight: 800; padding: 1px 7px;
+    border-radius: 999px; background: #e5e7eb; color: #4b5563;
+  }
+  .badge.hot { background: #dcfce7; color: #15803d; }
+  .badge.warn { background: #fef3c7; color: #92400e; }
+  #vaultPerf { color: var(--ok); font-weight: 700; }
+
+  /* ---------- 成片记录 ---------- */
+  .titem {
+    border: 1px solid var(--line); border-radius: 9px; padding: 9px 11px; margin-bottom: 8px;
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #fff;
+  }
+  .titem.rated { border-left: 3px solid var(--accent); background: #fbfcff; }
+  .tmain { flex: 1 1 240px; min-width: 0; }
+  .titem .tt { font-size: 13.5px; font-weight: 800; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .titem .tmeta { color: var(--text-3); font-size: 12px; margin-top: 3px; display: flex; flex-wrap: wrap; gap: 3px 10px; }
+  .stars { display: flex; gap: 4px; align-items: center; flex: 0 0 auto; }
+  .star {
+    width: 28px; height: 28px; border: 1px solid #d7e4ff; background: #fff; color: var(--accent);
+    border-radius: 7px; font: 700 12px/1 inherit; font-family: inherit; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .star:hover { background: #eff5ff; }
+  .star.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tpending { font-size: 12px; color: var(--hit); font-weight: 700; margin-left: 4px; }
+  .tops { display: flex; gap: 5px; flex-wrap: wrap; flex: 0 0 auto; }
+  .tbody { flex: 1 1 100%; border-top: 1px dashed var(--line); margin-top: 8px; padding-top: 8px; }
+  .tbody pre {
+    margin: 0; max-height: 260px; overflow: auto; background: var(--bg-sub);
+    border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px 12px;
+    font: 12px/1.7 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap; word-break: break-word; color: var(--text-1);
+  }
+  .tused { margin-top: 7px; }
+  .tuse { font-size: 12px; color: var(--text-2); padding: 1px 0; }
+
+  /* ---------- Toast ---------- */
+  #toast {
+    position: fixed; left: 50%; bottom: 34px; transform: translate(-50%, 16px);
+    background: #1f2733; color: #fff; font-size: 13px; font-weight: 600;
+    padding: 10px 18px; border-radius: 10px; box-shadow: 0 8px 24px rgba(31,39,51,.28);
+    opacity: 0; pointer-events: none; transition: opacity .18s, transform .18s; z-index: 99;
+    max-width: 80vw;
+  }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast.good { background: #15803d; }
+  #toast.bad { background: #b42318; }
+
+  /* ---------- 过滤标准抽屉（结构层：不依赖皮肤也能用） ---------- */
+  .cfg-scrim {
+    position: fixed; inset: 0; z-index: 40;
+    background: rgba(20, 16, 10, .45);
+    opacity: 0; pointer-events: none;
+    transition: opacity .18s ease-out;
+  }
+  .cfg-scrim[data-open="true"] { opacity: 1; pointer-events: auto; }
+  .cfg-drawer {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 50;
+    width: min(520px, 94vw);
+    display: flex; flex-direction: column;
+    background: var(--bg-page);
+    border-left: 1px solid var(--line);
+    box-shadow: -14px 0 40px -18px rgba(20, 16, 10, .5);
+    transform: translateX(100%);
+    transition: transform .2s ease-out;
+    visibility: hidden;
+  }
+  .cfg-drawer[data-open="true"] { transform: none; visibility: visible; }
+  .cfg-head {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+    padding: 14px 18px; background: var(--bg-card);
+    border-bottom: 1px solid var(--line);
+  }
+  .cfg-head h2 { margin: 0; font-size: 16px; }
+  .cfg-head .cfg-hint { font-size: 12px; color: var(--text-3); margin-right: auto; }
+  .cfg-body { flex: 1 1 auto; overflow-y: auto; padding: 16px 18px 28px; display: flex; flex-direction: column; gap: 16px; }
+  /* 抽屉里的卡片不再带外边距，避免和 body 的 padding 叠加 */
+  .cfg-body .card { margin: 0; }
+  /* 用 visibility 而不是 display:none 收抽屉：
+     页内自检靠 textContent 与 .click() 驱动抽屉里的控件，两者都要元素仍在渲染树里。 */
+  @media (prefers-reduced-motion: reduce) {
+    .cfg-drawer, .cfg-scrim { transition-duration: .01ms !important; }
+  }
+
+  @media (max-width: 1080px) {
+    .grid { grid-template-columns: minmax(0, 1fr); }
+  }
+</style>
+<style id="stardew">
+/* ==========================================================================
+   星露谷 · 口播文字稿整理工具 UI 皮肤
+   复刻的是视觉语言，不是原版素材（游戏贴图受版权保护）：
+   三层木框 + 羊皮内芯 + 木带标题 + 木板按钮 + 背包格 + 抖动像素 + 描边字。
+
+   为什么星露谷适合这个工具：它的面板内芯本来就是「米黄羊皮 + 深棕字」，
+   高对比、暖色、适合久读——而这个工具的核心动作就是读中文稿子。
+   所以这一版以羊皮浅色为主档，深色做「夜晚谷仓」副档。
+
+   零网络请求：不引字体、不引图片，所有质感用 CSS 画。
+   底线不变：像素只进框架不进正文；正文 ≥17px、对比度 ≥4.5:1、命中区 ≥24px。
+   规矩：色值只出现在 :root 与暗档覆盖块，组件只引令牌。
+   ========================================================================== */
+
+:root {
+  /* —— 谷仓色阶 —— */
+  --wood-dark:   #3B2A1A;   /* 外框描边 */
+  --wood-mid:    #8B5A2B;   /* 木带、按钮底 */
+  --wood-light:  #B07B45;   /* 斜面高光 */
+  --wood-pale:   #C99A5F;
+  --parchment:   #F2E2B8;   /* 面板内芯 */
+  --parchment-2: #E8D5A4;   /* 次级面板 */
+  --slot:        #DCC99C;   /* 背包空格 */
+  --sky:         #8EC9E8;
+  --sky-2:       #C9E6F2;
+  --grass:       #6FA84E;
+  --grass-2:     #4E9131;
+  --coin:        #E3B23C;
+  --berry:       #C4402F;
+  --berry-2:     #A32B1E;
+  /* 删除线的常态色。上一版常态就是全不透明的 --berry，等于"已经很重"，
+     悬停时没有加重的余地——hover 反馈必须留出色差空间才做得出来。
+     .72 不是估的：按非文本图形 3:1 反解出来的最小档（.45 时只有 2.08:1，看不见）。 */
+  --berry-line:  rgba(163, 43, 30, .72);
+  --milk:        #FFF8E7;   /* 只当纸面用：夜里会变近黑 */
+  /* 云与天空上的字：夜里也必须亮着。它们绝不能复用 --milk——
+     第 7 轮实测暗档标题几乎看不见，就是因为 --milk 当纸面时会翻成近黑 */
+  --cloud:       #FFF8E7;
+  --ink-on-sky:  #FFF8E7;
+  --straw:       #FBE9C9;   /* 枯草底：待删提示 */
+  --rot:         #F7DDD7;   /* 腐坏底：必须改 */
+  --sprout:      #DFEFD3;   /* 新芽底：通过 */
+
+  /* —— 产品已有令牌的重映射（内联样式与 JS 片段都引这些名字）—— */
+  --bg-page:  #6B4F32;      /* 页面底 = 泥地，比卡片暗，层次才立得住 */
+  --bg-card:  var(--parchment);
+  --bg-sub:   var(--parchment-2);
+  --text-1:   #3B2A1A;      /* 深棕墨：羊皮上对比极高 */
+  --text-2:   #5C4326;
+  --text-3:   #6E5533;      /* 弱化说明下限 */
+  --text-ph:  #6E5533;
+  --accent:     #2E6B3F;    /* 草绿：主操作 */
+  --accent-ink: #215030;
+  --ok:       #2E6B3F;
+  --ok-solid: #2E6B3F;
+  --hit:      #8A5A0B;      /* 待删 = 枯叶棕黄 */
+  --bad:      #A32B1E;      /* 极限词 = 浆果红 */
+  --line:     #C9AE78;
+  --line-soft:#D8C08A;
+  --focus:    #1F5E9E;
+
+  /* —— 语义层 —— */
+  --surface-app:   var(--bg-page);
+  --surface-paper: var(--parchment);
+  --surface-panel: var(--parchment-2);
+  --surface-select:#CFE3C2;
+  --surface-hover: #E2CE9C;
+  /* 按「压在什么材质上」分家，不按颜色长相分：同一色既当文字又当背景，两档必有一档错 */
+  --ink-on-wood:   #FFF3D4;   /* 木板 / 绿板 / 红板上的字，两档都用它，所以那些板两档都得够深 */
+  --ink-on-gold:   #241A08;   /* 金币、读数窗上的字 */
+  --leaf-hi:       #4E9B5F;   /* 主操作木板的绿：与文字用的 --accent 分开 */
+  --leaf-lo:       #2E6B3F;
+  --clay-hi:       #C4402F;   /* 危险 toast 的红 */
+  --clay-lo:       #A32B1E;
+  --edge-field:    var(--wood-dark);
+  --focus-ring:    rgba(31, 94, 158, .34);
+  --shadow-hard:   #2A1D10;   /* 硬投影：不透明、无模糊 */
+  --bevel-hi:      rgba(255, 244, 214, .55);
+  --bevel-lo:      rgba(59, 42, 26, .45);
+  --wood-face:     repeating-linear-gradient(90deg, var(--grain) 0 2px, transparent 2px 7px),
+                   linear-gradient(var(--wood-light) 0%, var(--wood-mid) 100%);
+  /* 板纹做进 --wood-face 本身：按钮、木带标题、状态条、toast 一次性全长出木纹，
+     不用逐处补，也不会漏。平涂的棕色只会让它看起来"是个深色网站"，不是星露谷。 */
+  --grain:         rgba(59, 42, 26, .16);
+  --grass-dither:  repeating-conic-gradient(from 0deg, rgba(20, 40, 16, .22) 0% 25%, transparent 0% 50%);
+
+  --font-ui:   "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Hiragino Sans GB", system-ui, sans-serif;
+  --font-num:  "Consolas", "Cascadia Mono", ui-monospace, Menlo, monospace;
+  --font-read: "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", system-ui, sans-serif;
+  --target: 28px;
+  --measure: 76ch;   /* ch 是「0」字符宽，1 汉字 = 2ch：76ch ≈ 38 个汉字 */
+
+  /* —— 动效令牌：时长与节奏只在这里定义一次 ——
+     散在七条规则里的 160ms 就是"同一个项目里动效忽快忽慢"的成因。
+     全部用 steps()：像素画的按下、着色、弹出本来就不是连续插值，是换帧。
+     唯一的例外是 --t-env（云），它用 steps 不是为了"手 K 感"而是为了不糊边——
+     见下面 --blk 的说明。 */
+  --blk: 6px;                       /* 像素块基准：位移必须是它的整数倍，亚像素插值会把硬边糊成灰边 */
+  --t-hover:  100ms steps(2, end);  /* hover 着色 */
+  --t-ctrl:   160ms steps(3, end);  /* 控件状态翻转着色 */
+  --t-panel:  140ms steps(4, end);  /* 面板入场 */
+  --t-pop:    160ms steps(4, end);  /* toast */
+  --t-drawer: 200ms steps(7, end);  /* 抽屉 */
+  --t-env:    36s   steps(6, end);  /* 云：36px ÷ 6 块 = 每 3 秒跳一格 */
+}
+
+/* ============================ 基础 ============================ */
+* { border-radius: 0 !important; }
+html, body {
+  background: var(--surface-app);
+  color: var(--text-1);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.6;
+}
+/* 泥地纹理：抖动点阵，纯 CSS */
+body {
+  background-image: repeating-conic-gradient(from 0deg, rgba(0, 0, 0, .07) 0% 25%, transparent 0% 50%);
+  background-size: 4px 4px;
+}
+.wrap { max-width: 1680px; padding: 18px 20px 44px; }
+h1, h2, h3 { font-family: var(--font-ui); letter-spacing: .01em; }
+
+/* ============================ 标题屏：头部画成农场 ============================ */
+.app-head {
+  /* 图层顺序 = 从上到下：栅栏板 → 横梁 → 草地颗粒 → 天空到草地。
+     栅栏板压在横梁前面，缝隙里露出横梁，就是一排尖桩栅栏。
+     地平线压到 74%：上一版 58% 太浅，副标题正好骑在天地交界上，"Markdown"
+     几个字落在草地上被吃掉一半——这是看真实渲染才发现的，缩略图看不出来。 */
+  background:
+    repeating-linear-gradient(90deg, var(--wood-pale) 0 6px, transparent 6px 22px) left bottom / 100% 18px no-repeat,
+    linear-gradient(var(--wood-light), var(--wood-mid)) left bottom 11px / 100% 4px no-repeat,
+    linear-gradient(var(--wood-light), var(--wood-mid)) left bottom 3px / 100% 4px no-repeat,
+    var(--grass-dither) left bottom / 100% 26% no-repeat,
+    linear-gradient(var(--sky) 0%, var(--sky-2) 74%, var(--grass) 74%, var(--grass-2) 100%);
+  border: 3px solid var(--wood-dark);
+  box-shadow: 0 0 0 3px var(--wood-light), 5px 5px 0 var(--shadow-hard);
+  padding: 18px 18px 40px;
+  position: relative;
+  overflow: hidden;
+}
+/* 像素云：一个 6px 方块用 box-shadow 堆出阶梯轮廓。
+   上一版用 4px 单位，在 1440px 宽的头里几乎看不见——像素画的尺度要跟着版面走。 */
+.app-head::before {
+  content: ""; position: absolute; top: 16px; left: 7%;
+  width: 6px; height: 6px; background: var(--cloud);
+  box-shadow:
+    6px 0 var(--cloud), 12px 0 var(--cloud), 18px 0 var(--cloud), 24px 0 var(--cloud),
+    6px -6px var(--cloud), 12px -6px var(--cloud), 18px -6px var(--cloud),
+    0 6px var(--cloud), 6px 6px var(--cloud), 12px 6px var(--cloud), 18px 6px var(--cloud), 24px 6px var(--cloud), 30px 6px var(--cloud);
+  /* 云在飘。位移 36px = 6 个像素块，steps(6) 保证每一帧都落在整块网格上——
+     亚像素插值会把 6px 方块的硬边糊成灰边，那正是像素风最怕的事。
+     每 3 秒跳一格：慢到不构成"有事情正在发生"的信号，但标题屏是个地方而不是张图。
+     只动 ::before：::after 里混着 5 个 --grass-2 的草簇偏移，整块平移会把草拖走。
+     关键帧首尾同位，因为产品那条 `*,*::before,*::after` 的减动档会把循环砍成单趟，
+     不同位就等于给减动用户留下一个停在错误位置的云。 */
+  animation: cloud-drift var(--t-env) infinite;
+}
+@keyframes cloud-drift {
+  0%, 100% { transform: none; }
+  50% { transform: translateX(calc(var(--blk) * 6)); }
+}
+/* 第二朵云 + 远处树冠 */
+.app-head::after {
+  content: ""; position: absolute; top: 30px; right: 12%;
+  width: 6px; height: 6px; background: var(--cloud);
+  box-shadow:
+    6px 0 var(--cloud), 12px 0 var(--cloud), 18px 0 var(--cloud),
+    6px -6px var(--cloud), 12px -6px var(--cloud),
+    0 6px var(--cloud), 6px 6px var(--cloud), 12px 6px var(--cloud), 18px 6px var(--cloud),
+    42px 12px var(--grass-2), 48px 12px var(--grass-2),
+    42px 18px var(--grass-2), 48px 18px var(--grass-2), 42px 6px var(--grass-2), 48px 6px var(--grass-2);
+}
+.app-head h1 {
+  font-size: 24px; font-weight: 800; color: var(--ink-on-sky);
+  /* 像素描边字：八向硬偏移，不是模糊阴影 */
+  text-shadow:
+    2px 0 var(--wood-dark), -2px 0 var(--wood-dark),
+    0 2px var(--wood-dark), 0 -2px var(--wood-dark),
+    2px 2px var(--wood-dark), -2px -2px var(--wood-dark),
+    2px -2px var(--wood-dark), -2px 2px var(--wood-dark);
+}
+.app-head p { color: var(--ink-on-sky); margin-left: 34px; text-shadow: 1px 1px 0 var(--wood-dark); }
+.app-head .logo { width: 22px; height: 22px; color: var(--coin); }
+.app-head > * { position: relative; z-index: 1; }
+
+/* ============================ 木框面板（三层） ============================ */
+.card {
+  background: var(--parchment);
+  border: 3px solid var(--wood-dark);
+  box-shadow:
+    inset 0 0 0 2px var(--wood-light),      /* 内斜面 */
+    inset 0 0 0 3px var(--bevel-hi),
+    5px 5px 0 var(--shadow-hard);           /* 硬投影 */
+  padding: 0 0 16px;
+}
+/* 木带标题 */
+.card > h2 {
+  margin: 0 0 14px;
+  padding: 8px 14px;
+  font-size: 14px;
+  color: var(--ink-on-wood);
+  background: var(--wood-face);
+  border-bottom: 3px solid var(--wood-dark);
+  box-shadow: inset 0 1px 0 var(--bevel-hi);
+  text-shadow: 1px 1px 0 var(--wood-dark);
+  display: flex; align-items: center; gap: 8px;
+}
+.card > h2 .ico { font-family: var(--font-num); color: var(--coin); font-weight: 700; }
+/* 木带通铺，其余内容左右留出框边 */
+.card > *:not(h2) { margin-left: 14px; margin-right: 14px; }
+
+/* 次级面板：星露谷的分层靠"凹进去"，不靠色差。
+   实测 #E8D5A4 压在 #F2E2B8 上几乎分不开（图底关系太弱），
+   所以用左上暗、右下亮的内斜面把它雕成凹槽，而不是继续加深底色。 */
+.sub {
+  background: var(--parchment-2);
+  border: 2px solid var(--wood-mid);
+  box-shadow:
+    inset 2px 2px 0 var(--bevel-lo),
+    inset -1px -1px 0 var(--bevel-hi);
+  padding: 11px 12px 12px;
+}
+.sub-title { color: var(--text-1); font-weight: 700; margin-bottom: 7px; }
+.sub-title .hint { color: var(--text-3); }
+
+/* ============================ HUD 状态条 ============================ */
+.statusbar {
+  margin-top: 14px;
+  background: var(--wood-face);
+  border: 3px solid var(--wood-dark);
+  box-shadow: inset 0 1px 0 var(--bevel-hi), 5px 5px 0 var(--shadow-hard);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--ink-on-wood);
+  text-shadow: 1px 1px 0 var(--wood-dark);
+}
+.statusbar .ok { color: var(--ink-on-wood); font-weight: 800; }
+.statusbar b { color: var(--coin); }
+/* 计数 = 读数窗 */
+.count {
+  min-width: 30px;
+  background: var(--milk);
+  border: 2px solid var(--wood-dark);
+  color: var(--wood-dark);
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  padding: 0 6px;
+  box-shadow: inset -1px -1px 0 var(--slot);
+}
+/* 版本徽标：2px 深棕描边在小尺寸下把金币色压成一团黑（实测）。
+   改细边 + 内高光，让它读作"钉在标题旁的铜牌"而不是墨块。 */
+.pill {
+  background: var(--coin);
+  color: var(--ink-on-gold);
+  border: 1px solid var(--wood-dark);
+  box-shadow: inset 0 1px 0 var(--bevel-hi), inset 0 -1px 0 var(--bevel-lo);
+  font-family: var(--font-num);
+  font-size: 12px; font-weight: 800;
+  padding: 1px 7px;
+}
+
+.grid { grid-template-columns: minmax(0, 1.34fr) minmax(0, 1fr); gap: 18px; margin-top: 18px; }
+.col { gap: 18px; }
+
+/* ============================ 木板按钮 ============================ */
+.btn {
+  font-family: var(--font-ui);
+  font-size: 13px; font-weight: 700;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 3px solid var(--wood-dark);
+  background: var(--wood-face);
+  color: var(--ink-on-wood);
+  text-shadow: 1px 1px 0 var(--wood-dark);
+  box-shadow: inset 0 1px 0 var(--bevel-hi), 3px 3px 0 var(--shadow-hard);
+  cursor: pointer;
+  /* 按下必须当帧换状态。原来这里挂着 `transform .05s steps(2)` 和 `box-shadow .05s steps(2)`：
+     手指已经按下、木板还在半空，而这是全工具重复次数最高的动作——50ms 会被重复成"手感肉"。
+     动画 box-shadow 本身也是禁的。位移和投影都归到 :active 静态值，只有 hover 提亮走过渡。 */
+  transition: filter var(--t-hover);
+}
+.btn:hover { filter: brightness(1.1); }
+.btn:active { transform: translate(3px, 3px); box-shadow: inset 0 1px 0 var(--bevel-hi), 0 0 0 var(--shadow-hard); }
+.btn-primary { background: linear-gradient(var(--leaf-hi), var(--leaf-lo)); }
+.btn-primary:hover { filter: brightness(1.12); }
+.btn-ghost { background: var(--parchment-2); color: var(--text-1); text-shadow: none; }
+.btn-ghost:hover { background: var(--surface-hover); }
+.btn-quiet { background: var(--parchment); color: var(--text-2); text-shadow: none; border-color: var(--wood-mid); }
+.btn-quiet:hover { background: var(--surface-hover); color: var(--text-1); }
+
+/* ============================ 输入：羊皮纸面 ============================ */
+input[type=text], textarea {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text-1);
+  background: var(--milk);
+  border: 2px solid var(--wood-dark);
+  box-shadow: inset 2px 2px 0 var(--slot);
+  padding: 8px 10px;
+}
+input[type=text]:focus, textarea:focus {
+  border-color: var(--focus);
+  box-shadow: inset 2px 2px 0 var(--slot), 0 0 0 3px var(--focus-ring);
+}
+input::placeholder, textarea::placeholder { color: var(--text-3); }
+
+/* 背包格 */
+.chips { gap: 6px; margin-bottom: 9px; }
+.chip {
+  background: var(--slot);
+  border: 2px solid var(--wood-dark);
+  color: var(--text-1);
+  padding: 3px 3px 3px 9px;
+  font-size: 13px; font-weight: 600;
+  min-height: var(--target);
+  align-items: center;
+  box-shadow: inset 1px 1px 0 var(--bevel-hi);
+}
+.chip button {
+  min-width: 24px; min-height: 24px;
+  border: 1px solid var(--wood-mid);
+  background: var(--parchment);
+  color: var(--text-2);
+}
+.chip button:hover { background: var(--berry); color: var(--ink-on-wood); }
+.chip.empty { background: var(--parchment-2); color: var(--text-3); }
+
+.rules { gap: 4px; }
+.rule { min-height: 30px; color: var(--text-1); }
+.rule input { accent-color: var(--accent); width: 16px; height: 16px; }
+.rule .hint { color: var(--text-3); }
+
+.seg { border: 2px solid var(--wood-dark); background: var(--parchment-2); padding: 2px; gap: 2px; }
+.seg label { min-height: 26px; padding: 0 12px; display: inline-flex; align-items: center; color: var(--text-2); font-size: 13px; transition: background var(--t-hover); }
+.seg label:hover { background: var(--surface-hover); }
+.seg input:checked + span { color: var(--accent-ink); font-weight: 800; }
+.seg label:has(input:checked) { background: var(--surface-select); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ============================ 稿纸：羊皮卷轴 ============================ */
+textarea { line-height: 1.75; min-height: 130px; }
+.ta-dash { border: 2px dashed var(--wood-mid); background: var(--milk); }
+#rawText, #cleanText, #finalText {
+  font-family: var(--font-read);
+  font-size: 17px;
+  line-height: 1.9;
+  color: var(--text-1);
+  max-width: var(--measure);
+}
+#rawText, #cleanText { min-height: 250px; }
+#finalText { min-height: 320px; }
+#promptText {
+  font-family: var(--font-num);
+  font-size: 13px; line-height: 1.7;
+  background: var(--parchment-2);
+  color: var(--text-1);
+}
+.meta { gap: 8px 16px; font-size: 12px; color: var(--text-3); }
+.meta .k { color: var(--accent-ink); font-family: var(--font-num); font-weight: 800; }
+.actions { gap: 10px; }
+
+/* ============================ 清洗报告 ============================ */
+.report {
+  background: var(--milk);
+  border: 3px solid var(--wood-dark);
+  box-shadow: inset 0 0 0 2px var(--wood-light), 5px 5px 0 var(--shadow-hard);
+}
+.report > .rh {
+  background: var(--wood-face);
+  color: var(--ink-on-wood);
+  border-bottom: 3px solid var(--wood-dark);
+  padding: 8px 12px;
+  font-size: 13px; font-weight: 700;
+  text-shadow: 1px 1px 0 var(--wood-dark);
+  display: flex; align-items: center; gap: 8px;
+}
+.report-body { padding: 12px 14px; }
+.rline {
+  /* 名字列 104→92、计数列 46→42、间距 10→8：把宽度让给示例句，
+     真实渲染里「放回」常被挤到第二行，报告排布变毛糙 */
+  grid-template-columns: 92px 42px minmax(0, 1fr);
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 2px dotted var(--line);
+  font-size: 13px;
+}
+.rline:last-child { border-bottom: 0; }
+.rline .nm { color: var(--text-1); font-weight: 700; }
+.rline .ct { font-family: var(--font-num); color: var(--text-3); font-weight: 800; }
+.rline .ct.hit { color: var(--hit); }
+.rline .ct.zero { color: var(--text-3); }
+/* 示例句等宽：逐句核对要把删/留两句上下排成列比差异 */
+.rline .ex { font-family: var(--font-num); font-size: 15.5px; line-height: 1.75; color: var(--text-1); }
+.rline .ex > div { margin-bottom: 9px !important; }
+/* 删除的句子必须仍然可读——判断"这刀切对了吗"要看清原句；
+   状态靠删除线 + 左侧枯叶色条表达，不靠降对比 */
+.rline .ex > div:has(s) { border-left: 3px solid var(--hit); padding-left: 10px; }
+.rline .ex s {
+  color: var(--text-1); text-decoration: line-through;
+  text-decoration-thickness: 2px; text-decoration-color: var(--berry-line);
+  /* 常态线放轻，悬停时"变实 + 加粗"，回答的是用户真会问的那句：
+     「这句到底被删成什么样了」。
+     不做入场画线：renderReport 每次 innerHTML='' 整块重建，
+     入场动画会在每一次点「放回」后把所有行重播一遍，
+     而且变了的那一行恰恰是消失的那一行——动画对象错了。
+     用原生装饰而不是 ::after scaleX：示例句会长到换行，
+     行内盒的绝对定位子元素取的是所有片段并集的外接盒，跨行会画错。 */
+  transition: text-decoration-color var(--t-hover), text-decoration-thickness var(--t-hover);
+}
+.rline .ex s:hover { text-decoration-color: var(--berry); text-decoration-thickness: 3px; }
+/* 理由是"说明"不是"操作"：中性标签，别和按钮撞色 */
+.rline .ex em {
+  color: var(--text-3); background: var(--parchment-2);
+  border: 1px solid var(--wood-mid); padding: 0 5px;
+  font-style: normal; font-weight: 700; font-family: var(--font-num); font-size: 11.5px;
+}
+
+/* 放回 / 收回这类行内操作：必须是"能按的东西"的样子。
+   上一版只把文字色改成绿，底色仍和理由标签同为 --parchment-2，
+   真实渲染里两者看起来是同一类对象——"不同色"是假修复，底色才决定归类。 */
+.mini {
+  min-height: var(--target);
+  padding: 0 10px;
+  background: var(--sprout);
+  border: 2px solid var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-ui);
+  font-size: 12.5px; font-weight: 800;
+  box-shadow: inset 0 1px 0 var(--bevel-hi), 2px 2px 0 var(--shadow-hard);
+  /* 「放回」是逐句核对时点得最多的按钮，hover 该有反馈；
+     只给 background 加过渡，:active 的位移照旧当帧完成（同 .btn 的理由） */
+  transition: background var(--t-hover);
+}
+.mini:hover { background: var(--surface-select); }
+.mini:active { transform: translate(2px, 2px); box-shadow: inset 0 1px 0 var(--bevel-hi), 0 0 0 var(--shadow-hard); }
+.mini.warn { color: var(--hit); border-color: var(--hit); background: var(--straw); }
+.mini.warn:hover { background: var(--straw); }
+.keptback { color: var(--ok); font-weight: 800; font-size: 12.5px; }
+
+.gem {
+  background: var(--parchment);
+  border: 2px solid var(--wood-mid);
+  border-left: 4px solid var(--accent);
+  box-shadow: inset 0 1px 0 var(--bevel-hi);
+  padding: 9px 12px;
+}
+.gem .gt { color: var(--text-1); font-family: var(--font-num); font-size: 15px; line-height: 1.75; }
+.gem .gs { color: var(--text-3); font-size: 12px; font-family: var(--font-num); }
+.gem .score { color: var(--accent-ink); font-weight: 800; font-family: var(--font-num); }
+.gem .pick { color: var(--accent-ink); font-weight: 800; text-decoration: underline; }
+
+.note, .tip { color: var(--text-3); font-size: 12.5px; }
+.warn { color: var(--hit); }
+/* 终稿从「缺结构」变成「✓ 结构完整，可以下载交给剪辑」，是整个工作流里唯一的
+   交付时刻，而它现在只是颜色当帧硬切。两半一起改才有意义：
+   ① 落点色从 --text-3(灰) 换成 --ok(叶绿)——否则 160ms 是从灰淡入到灰，等于不动；
+      合格性已有静态保证：--ok 压 --bg-card 日档 4.97:1、夜档 8.15:1。
+   ② 着色过渡。#finalWarn 是常驻元素、变的是 class，transition 天然只在真变时触发，
+      不存在重建重播的问题。 */
+#finalWarn { transition: color var(--t-ctrl); }
+#finalWarn:not(.warn) { color: var(--ok); }
+
+/* ============================ 风险 / 零件 / 缺口 ============================ */
+.risk-item { background: var(--straw); border: 2px solid var(--wood-mid); border-left: 4px solid var(--hit); padding: 9px 12px; }
+.risk-item .rw { color: var(--hit); font-weight: 800; }
+.risk-item .rs { color: var(--text-2); }
+.risk-item .rf { color: var(--ok); }
+.risk-item .rcat { background: var(--parchment); color: var(--hit); border: 1px solid var(--wood-mid); padding: 0 6px; font-family: var(--font-num); font-size: 11.5px; }
+.risk-item.high { background: var(--rot); border-left-color: var(--berry-2); }
+.risk-item.high .rw { color: var(--berry-2); }
+.risk-item.high .rcat { color: var(--berry-2); }
+
+.parts { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+.part { background: var(--slot); border: 2px solid var(--wood-dark); box-shadow: inset 1px 1px 0 var(--bevel-hi); padding: 8px 9px; }
+.part .pn { color: var(--text-1); font-weight: 800; }
+.part .pr { color: var(--text-3); }
+.part .pc { color: var(--accent-ink); font-family: var(--font-num); }
+.part.zero { background: var(--rot); border-color: var(--berry-2); }
+.part.zero .pc { color: var(--berry-2); }
+
+.gap { background: var(--straw); border: 2px dashed var(--wood-mid); padding: 9px 12px; }
+.gap.high { border-style: solid; border-color: var(--berry-2); background: var(--rot); }
+.gap.ok { border-style: solid; border-color: var(--ok); background: var(--sprout); }
+.gap .gseg { color: var(--text-2); }
+.gap .gw { color: var(--text-1); }
+.gap .gwhy { color: var(--text-2); }
+.gap .ghow { color: var(--ok); }
+.psel { background: var(--milk); border: 2px solid var(--wood-dark); color: var(--text-1); min-height: var(--target); font-size: 12.5px; }
+.fixrow { background: var(--parchment); border: 2px solid var(--wood-mid); }
+.fixrow .ftx { color: var(--text-1); font-family: var(--font-num); font-size: 14.5px; line-height: 1.75; }
+.fixrow .fsim { color: var(--text-3); font-family: var(--font-num); }
+
+/* ============================ 素材库 / 成片 ============================ */
+.vault-bar .stat b, #vaultPerf { color: var(--accent-ink); font-family: var(--font-num); }
+.vgroup > h3 { color: var(--text-1); font-size: 13px; }
+.vgroup > h3 .cnt { color: var(--text-3); font-family: var(--font-num); }
+.vitem { background: var(--parchment); border: 2px solid var(--wood-mid); box-shadow: inset 0 1px 0 var(--bevel-hi); padding: 9px 11px; }
+.vitem .vtx { color: var(--text-1); font-family: var(--font-num); font-size: 15px; line-height: 1.75; }
+.vitem .vmeta { color: var(--text-3); font-size: 12px; font-family: var(--font-num); }
+.vitem .vtag { background: var(--surface-select); color: var(--accent-ink); border: 1px solid var(--accent); padding: 0 6px; font-family: var(--font-num); font-size: 11.5px; font-weight: 700; }
+.vitem.unused { border-left: 4px solid var(--ok); background: var(--sprout); }
+.vitem.duped { border-left: 4px solid var(--hit); background: var(--straw); }
+.vempty { color: var(--text-3); }
+.badge { background: var(--parchment-2); color: var(--text-1); border: 2px solid var(--wood-mid); font-family: var(--font-num); }
+.badge.hot { background: var(--sprout); color: var(--accent-ink); border-color: var(--ok); }
+.badge.warn { background: var(--straw); color: var(--hit); border-color: var(--hit); }
+
+.titem { background: var(--parchment); border: 2px solid var(--wood-dark); box-shadow: inset 0 1px 0 var(--bevel-hi); }
+.titem.rated { border-left: 4px solid var(--coin); }
+.titem .tt { color: var(--text-1); font-size: 14px; font-weight: 800; }
+.titem .tmeta { color: var(--text-3); font-family: var(--font-num); }
+.tpending { color: var(--hit); font-weight: 800; }
+/* 评分按钮 = 一排背包格 */
+.star {
+  width: var(--target); height: var(--target);
+  border: 2px solid var(--wood-dark);
+  background: var(--slot);
+  color: var(--text-1);
+  font-family: var(--font-num); font-weight: 800;
+  box-shadow: inset 1px 1px 0 var(--bevel-hi);
+}
+.star:hover { background: var(--parchment); }
+.star.on { background: var(--coin); border-color: var(--wood-dark); color: var(--ink-on-gold); }
+.tbody { border-top: 2px dotted var(--line); }
+.tbody pre { background: var(--parchment-2); border: 2px solid var(--wood-mid); font-family: var(--font-num); color: var(--text-1); }
+.tuse { color: var(--text-2); }
+
+/* ============================ toast / 页脚 / 焦点 ============================ */
+#toast {
+  background: var(--wood-face);
+  color: var(--ink-on-wood);
+  border: 3px solid var(--wood-dark);
+  box-shadow: inset 0 1px 0 var(--bevel-hi), 5px 5px 0 var(--shadow-hard);
+  font-size: 13px; font-weight: 800;
+  text-shadow: 1px 1px 0 var(--wood-dark);
+  /* 180→160ms：它后面还有 2200ms 停留，入场不该抢。
+     连续第二条 toast 类名不变、过渡不会重放——这是可接受的：
+     第一条还在屏幕上，换文字本来就不该再弹一次。 */
+  transition: opacity var(--t-pop), transform var(--t-pop);
+}
+#toast.good { background: linear-gradient(var(--leaf-hi), var(--leaf-lo)); }
+#toast.bad { background: linear-gradient(var(--clay-hi), var(--clay-lo)); }
+/* 页脚也装进木框：星露谷本来把所有东西都放在框里。
+   顺带修掉「页脚文字直接压在泥地底上只有 1.08:1」和「焦点环在泥地上看不见」 */
+footer.foot {
+  margin-top: 20px; padding: 14px 16px;
+  background: var(--parchment);
+  border: 3px solid var(--wood-dark);
+  box-shadow: inset 0 0 0 2px var(--wood-light), 5px 5px 0 var(--shadow-hard);
+  color: var(--text-2);
+}
+.kbd-hint { color: var(--text-2); }
+.kbd-hint kbd {
+  background: var(--milk);
+  border: 2px solid var(--wood-dark);
+  color: var(--text-1);
+  box-shadow: 2px 2px 0 var(--shadow-hard);
+  font-family: var(--font-num);
+}
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible,
+input:focus-visible, textarea:focus-visible, select:focus-visible,
+input[type=checkbox]:focus-visible, input[type=radio]:focus-visible,
+.seg label:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* ============================ 动效：状态级与环境级 ============================
+   原则：只动 transform / opacity / 绘制色；不新增任何 box-shadow 动画；
+   UI 动效全部 ≤300ms；节奏统一走 --t-* 令牌，别在规则里写魔法数字。
+   选目标的方法不是"还有什么能动"，而是"界面上哪些东西的值会变、而它现在是硬切的"。
+   在 0 行 JS 的前提下，只有 class 变化、display 变化、伪元素状态能被免费点亮；
+   textContent 变化（字数、徽章、状态栏）CSS 观察不到，别硬做。 */
+
+/* ② 清洗稿出现的那一下。这是全工具唯一一个"用户劳动成果从无到有"的翻转：
+   HTML 里写死 style="display:none"，applyClean 设成 ''，清空时设回 'none'。
+   已经是 '' 时再赋 '' 不产生变化，所以入场天然只在真出现那一次触发。
+   不支持 @starting-style 的老浏览器拿不到动画、但拿得到正确终态，降级是免费的。
+   页内自检读的是内联 style.display（全文件 getComputedStyle 出现 0 次），碰不到。
+   ⚠ 不要把 display 也加进 transition 列表（实测）：allow-discrete 会让 display 在
+   前 50% 仍是 none，元素压根没进入可动画状态，opacity 直接读到 1、过渡根本不创建。
+   入场只需要 @starting-style + opacity/transform；display 过渡是给"退场"用的，这里没有退场。 */
+#cleanWrap {
+  transition: opacity var(--t-panel), transform var(--t-panel);
+}
+@starting-style {
+  #cleanWrap { opacity: 0; transform: translateY(calc(var(--blk) * 2)); }
+}
+
+/* 抽屉与遮罩：产品写的是 ease-out，那是"滑"，星露谷是"一块木板推进来"。
+   遮罩比抽屉快 60ms 收住，背景先定、前景后到，层次才对。
+   这两条是后置覆写，产品那条 `@media reduce` 带 !important，仍然赢。 */
+.cfg-drawer { transition: transform var(--t-drawer); }
+.cfg-scrim  { transition: opacity var(--t-panel); }
+
+/* ============================ 响应式 ============================ */@media (max-width: 1320px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) {
+  .wrap { padding: 12px 10px 36px; }
+  .card > *:not(h2) { margin-left: 10px; margin-right: 10px; }
+  .rline { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  .rline .ct { text-align: left; }
+  :root { --measure: 100%; }
+  #rawText, #cleanText, #finalText { font-size: 16px; }
+}
+
+/* ============================ 夜晚谷仓（副档） ============================ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --wood-dark:   #0F0C08;
+    --wood-mid:    #4A3722;
+    --wood-light:  #6B5030;
+    --wood-pale:   #8A6A44;
+    --parchment:   #2A2118;
+    --parchment-2: #221A13;
+    --slot:        #33291D;
+    --sky:         #16233A;
+    --sky-2:       #22364F;
+    --grass:       #2C4A2A;
+    --grass-2:     #1E3520;
+    --berry:       #E0705D;
+    --berry-2:     #E0705D;
+    --berry-line:  rgba(224, 112, 93, .72);   /* 同样按 3:1 反解：.5 时只有 2.49:1 */
+    --milk:        #1C1610;
+    --cloud:       #DCD3BC;   /* 夜里的云是月光照着的，仍是亮的 */
+    --ink-on-sky:  #FFF3D4;
+    --straw:       #33281A;
+    --rot:         #3A211C;
+    --sprout:      #1E3222;
+
+    --bg-page:  #14100B;
+    --text-1:   #EFE2C4;
+    --text-2:   #CBB894;
+    --text-3:   #A8977A;
+    --text-ph:  #A8977A;
+    --accent:     #7FCB8E;
+    --accent-ink: #7FCB8E;
+    --ok:       #7FCB8E;
+    --ok-solid: #7FCB8E;
+    --hit:      #F0C674;
+    --bad:      #F0917F;
+    --line:     #4A3A26;
+    --line-soft:#3C2F1F;
+    --focus:    #7FD4E8;
+    --edge-field: var(--wood-pale);    /* 暗档面板内芯本身很暗，边界不能再用近黑的 wood-dark：2.12:1 → 3.18:1 */
+    --leaf-hi:      #3E8C52;
+    --leaf-lo:      #23633A;
+    --clay-hi:      #B4483B;
+    --clay-lo:      #8E2F26;
+
+    --surface-select: #23402A;
+    --surface-hover:  #3A2D1D;
+    --shadow-hard:    #000000;
+    --bevel-hi:       rgba(255, 244, 214, .18);
+    --bevel-lo:       rgba(0, 0, 0, .5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn, .mini, .chip button, #toast, .star,
+  .seg label, .cfg-drawer, .cfg-scrim, #cleanWrap, #finalWarn, .rline .ex s {
+    transition-duration: .01ms !important;
+  }
+  .btn:active, .mini:active { transform: none; }
+  /* 云直接停掉。产品那条全局 `*` 的 animation-duration:.01ms + iteration-count:1
+     本来就会把循环砍成单趟，而关键帧首尾同位保证停回原位；
+     这里再写一遍 animation:none，是不想让"首尾同位"成为唯一的安全依赖。 */
+  .app-head::before { animation: none; }
+}
+</style>
+</head>
+<body>
+<!-- 图标符号表：单文件内联 SVG，统一 outline 风格 / stroke 1.8 / currentColor 跟随文字色。
+     不用 emoji：emoji 由系统字体渲染，跨平台字形不一致，也无法用 CSS 控制颜色与粗细。 -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs>
+  <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="9" y="9" width="11" height="11" rx="2.2"></rect><path d="M5.5 15.5V5.8A2.3 2.3 0 0 1 7.8 3.5h9.7"></path>
+  </symbol>
+  <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3.5v11"></path><path d="M7.5 10.5 12 15l4.5-4.5"></path><path d="M4.5 20h15"></path>
+  </symbol>
+  <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21.5 2.5 10.8 13.2"></path><path d="M21.5 2.5 14.7 21.5l-3.9-8.3-8.3-3.9z"></path>
+  </symbol>
+  <symbol id="i-sparkle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12.5 3.2 14.3 8l4.8 1.8-4.8 1.8-1.8 4.8-1.8-4.8L5.9 9.8 10.7 8z"></path><path d="M18.4 15.6l.9 2.2 2.2.9-2.2.9-.9 2.2-.9-2.2-2.2-.9 2.2-.9z"></path>
+  </symbol>
+  <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="3.2" width="16" height="17.6" rx="2.4"></rect><path d="M8 8.4h8M8 12.4h8M8 16.4h5"></path>
+  </symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 4.2 2.8 20h18.4z"></path><path d="M12 10.2v4"></path><path d="M12 17.2h.01"></path>
+  </symbol>
+  <symbol id="i-shapes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="7.2" cy="16.6" r="4.2"></circle><rect x="13" y="12.6" width="8.2" height="8.2" rx="1.6"></rect><path d="M11.4 3.2 16 10.6H6.8z"></path>
+  </symbol>
+  <symbol id="i-gem" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 3.5h10l4 5.5-9 11.5-9-11.5z"></path><path d="M3 9h18"></path><path d="M9.6 9 12 20.5 14.4 9"></path><path d="M9.6 9 12 3.5l2.4 5.5"></path>
+  </symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 20h4.2L20 8.2 15.8 4 4 15.8z"></path><path d="M14.2 5.6 18.4 9.8"></path>
+  </symbol>
+  <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3.2 20 7.6v8.8L12 20.8 4 16.4V7.6z"></path><path d="M4 7.6 12 12l8-4.4M12 12v8.8"></path>
+  </symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 7h8M17.6 7H20M4 12h4.4M14 12h6M4 17h10M19.6 17H20"></path><circle cx="14.8" cy="7" r="2.2"></circle><circle cx="11.2" cy="12" r="2.2"></circle><circle cx="17" cy="17" r="2.2"></circle>
+  </symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h3.6l2 2.4h7.4a2 2 0 0 1 2 2v7.2a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"></path>
+  </symbol>
+</defs></svg>
+
+<div class="wrap">
+
+  <header class="app-head">
+    <h1>
+      <svg class="logo" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="#1f2733" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="4" y="3" width="16" height="18" rx="2.5"></rect>
+        <path d="M9 3h6v3H9z" fill="#1f2733" stroke="none"></path>
+        <path d="M8 11h8M8 15h5"></path>
+      </svg>
+      口播文字稿整理工具
+      <span class="pill">v2.0 已修复</span>
+    </h1>
+    <p>沉淀你的剪辑思路，一键产出可剪辑 Markdown</p>
+  </header>
+
+  <div class="statusbar">
+    <span><svg class="ic" aria-hidden="true" focusable="false"><use href="#i-sliders"></use></svg> JS 状态：<span id="jsState" class="ok">加载中…</span></span>
+    <span>按钮点击：<span class="count" id="clickCount">0</span></span>
+    <span>已载入：<span class="count" id="loadedChars">0</span> 字</span>
+    <span class="spacer"></span>
+    <button class="btn btn-ghost" data-act="toggle-config" id="cfgOpen" aria-expanded="false" aria-controls="cfgDrawer">
+      <svg class="ic" aria-hidden="true" focusable="false"><use href="#i-sliders"></use></svg>
+      过滤标准 <span class="count" id="cfgCount">0</span>
+    </button>
+    <span id="saveState">本地草稿：未保存</span>
+  </div>
+
+  <div class="grid">
+
+    <!-- ============ 左栏 ============ -->
+    <div class="col">
+
+      <!-- ① 预清洗 -->
+      <section class="card">
+        <h2><span class="ico">①</span> 原始口播稿 → 预清洗</h2>
+        <div class="row" style="margin-bottom:10px">
+          <label class="sr-only" for="titleInput">这条片子的标题（用于导出文件名与一级标题）</label>
+          <input type="text" id="titleInput" placeholder="给这条片子起个标题（用于导出 .md 文件名与一级标题）" autocomplete="off">
+        </div>
+        <label class="sr-only" for="rawText">原始口播稿（语音转文字得到的整段文稿）</label>
+        <textarea id="rawText" class="ta-dash" placeholder="把语音转文字得到的口播稿整段粘贴到这里（带时间码也可以，工具会保留时间码）…"></textarea>
+        <div class="meta">
+          <span>原文 <span class="k" id="rawChars">0</span> 字</span>
+          <span>·</span>
+          <span>句数 <span class="k" id="rawSents">0</span></span>
+          <span>·</span>
+          <span>时间码 <span class="k" id="rawCodes">0</span> 个</span>
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" data-act="preclean"><svg class="ic" aria-hidden="true"><use href="#i-sparkle"></use></svg> 开始预清洗</button>
+          <button class="btn btn-ghost" data-act="sample">载入示例稿</button>
+          <button class="btn btn-quiet" data-act="clear-raw">清空文稿</button>
+        </div>
+
+        <div id="cleanWrap" style="display:none">
+          <label class="sr-only" for="cleanText">预清洗后的稿子（可手动微调）</label>
+          <textarea id="cleanText" class="ta-dash" placeholder="清洗结果…"></textarea>
+          <div class="meta">
+            <span>清洗后 <span class="k" id="cleanChars">0</span> 字</span>
+            <span>·</span>
+            <span>压缩 <span class="k" id="cleanRatio">0%</span></span>
+            <span>·</span>
+            <span>句数 <span class="k" id="cleanSents">0</span></span>
+          </div>
+          <div class="actions">
+            <button class="btn btn-primary" data-act="build-prompt"><svg class="ic" aria-hidden="true"><use href="#i-send"></use></svg> 生成 Prompt 包</button>
+            <button class="btn btn-ghost" data-act="copy-clean">复制清洗稿</button>
+          </div>
+
+          <div class="report">
+            <div class="rh" id="rh-report"><svg class="ic" aria-hidden="true"><use href="#i-list"></use></svg> 清洗报告（句子级删除可逐条放回）<span id="keptInfo" style="margin-left:auto;font-weight:600;font-size:12px;color:var(--text-3)"></span></div>
+            <div class="report-body" id="reportBody"></div>
+          </div>
+
+          <div class="report" style="margin-top:14px" id="riskWrap">
+            <div class="rh" id="rh-risk"><svg class="ic" aria-hidden="true"><use href="#i-alert"></use></svg> 合规风险（只标不删，发布前自己定）<span id="riskCount" class="badge" style="margin-left:auto" aria-label="合规风险命中数">0 处</span></div>
+            <div class="report-body" id="riskList"></div>
+          </div>
+
+          <div class="report" style="margin-top:14px">
+            <div class="rh" id="rh-story"><svg class="ic" aria-hidden="true"><use href="#i-shapes"></use></svg> 故事结构（我 vs 客户）</div>
+            <div class="report-body">
+              <div class="parts" id="partsGrid"></div>
+              <div id="gapList"></div>
+              <p class="note">零件由句子内容自动归类，可能不准；缺口只说明「这条故事缺哪块」，补的东西必须是你真实经历过的，工具不会也不该替你编。</p>
+            </div>
+          </div>
+
+          <div class="report" style="margin-top:14px">
+            <div class="rh" id="rh-gems"><svg class="ic" aria-hidden="true"><use href="#i-gem"></use></svg> 素材体检 · 疑似可剪片段</div>
+            <div class="report-body">
+              <div class="gems" id="gemList"></div>
+              <p class="note">按「含数字 / 有转折 / 带情绪 / 讲故事 / 长度适合一条切片」打分，仅供人工排序参考，不代表最终取舍。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ④ 素材库 -->
+      <section class="card">
+        <h2><span class="ico">②</span> 素材库（你的故事零件库存）</h2>
+        <div class="vault-bar">
+          <span class="stat">共 <b id="vaultTotal">0</b> 条</span>
+          <span class="stat">·</span>
+          <span class="stat">没用过 <b id="vaultUnused">0</b> 条</span>
+          <span class="stat">·</span>
+          <span class="stat">用过 <b id="vaultUsed">0</b> 条</span>
+          <span class="stat" id="vaultPerf"></span>
+          <span style="flex:1 1 auto"></span>
+          <div class="seg" role="group" aria-label="素材库排序方式">
+            <label><input type="radio" name="libSort" value="unused"><span>没用过优先</span></label>
+            <label><input type="radio" name="libSort" value="perf"><span>表现优先</span></label>
+            <label><input type="radio" name="libSort" value="busy"><span>最常用</span></label>
+          </div>
+          <label class="sr-only" for="vaultSearch">搜索素材</label>
+          <input type="text" id="vaultSearch" placeholder="搜素材" style="max-width:150px" autocomplete="off">
+          <button class="btn btn-quiet" data-act="vault-export"><svg class="ic" aria-hidden="true"><use href="#i-download"></use></svg> 导出 .md</button>
+          <button class="btn btn-quiet" data-act="vault-clear">清空库存</button>
+        </div>
+        <div id="vaultBody">
+          <p class="vempty">还没有素材。清洗后在「素材体检」里点「入库」，或手记一条你记得的客户原话、结果数字、真实细节。库里的东西攒够了，选题就不用从零想。</p>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <label class="sr-only" for="vaultInput">手记一条素材</label>
+          <input type="text" id="vaultInput" placeholder="手记一条素材（客户说的话 / 带数字的结果 / 时间地点人物）" autocomplete="off">
+          <button class="btn btn-ghost" data-act="vault-add">记一笔</button>
+        </div>
+      </section>
+    </div>
+
+    <!-- ============ 右栏 ============ -->
+    <div class="col">
+
+      <!-- 最终整理稿 -->
+      <section class="card">
+        <h2><svg class="ic" aria-hidden="true"><use href="#i-pencil"></use></svg> 最终整理稿</h2>
+        <div class="actions">
+          <button class="btn btn-primary" data-act="copy-md"><svg class="ic" aria-hidden="true"><use href="#i-copy"></use></svg> 复制 Markdown</button>
+          <button class="btn btn-ghost" data-act="download-md"><svg class="ic" aria-hidden="true"><use href="#i-download"></use></svg> 下载 .md</button>
+        </div>
+        <label class="sr-only" for="finalText">最终整理稿（粘贴大模型返回的 Markdown）</label>
+        <textarea id="finalText" class="ta-dash" placeholder="把大模型返回的最终稿粘贴到这里..."></textarea>
+        <div class="meta">
+          <span><span class="k" id="finalChars">0</span> 字</span>
+          <span>·</span>
+          <span><span class="k" id="finalLines">0</span> 行</span>
+          <span>·</span>
+          <span>结构：<span class="k" id="finalStruct">空</span></span>
+        </div>
+        <p class="note" id="finalWarn" style="display:none"></p>
+      </section>
+
+      <!-- Prompt 包 -->
+      <section class="card">
+        <h2><svg class="ic" aria-hidden="true"><use href="#i-send"></use></svg> Prompt 包</h2>
+        <div class="actions">
+          <button class="btn btn-primary" data-act="copy-prompt"><svg class="ic" aria-hidden="true"><use href="#i-copy"></use></svg> 复制 Prompt 包</button>
+          <button class="btn btn-ghost" data-act="download-prompt"><svg class="ic" aria-hidden="true"><use href="#i-download"></use></svg> 下载 .txt</button>
+        </div>
+        <label class="sr-only" for="promptText">Prompt 包（复制后交给大模型）</label>
+        <textarea id="promptText" readonly placeholder="先在左侧完成预清洗，Prompt  会出现在这里"></textarea>
+        <div class="meta">
+          <span><span class="k" id="promptChars">0</span> 字</span>
+          <span>·</span>
+          <span id="promptStamp">未生成</span>
+        </div>
+        <p class="note">用法：复制后丢给任意大模型 → 按它返回的 Markdown 结果，粘回上方「最终整理稿」→ 下载 .md 交给剪辑。</p>
+      </section>
+
+      <!-- ⑤ 成片记录 -->
+      <section class="card">
+        <h2><span class="ico">③</span> 成片记录（素材表现从这儿回来）</h2>
+        <div class="vault-bar">
+          <span class="stat" id="takesStat">共 <b>0</b> 条</span>
+          <span style="flex:1 1 auto"></span>
+          <button class="btn btn-quiet" data-act="take-now">手动记一条</button>
+          <button class="btn btn-quiet" data-act="takes-export">导出 .md</button>
+        </div>
+        <div id="takesBody"></div>
+        <p class="note">登记是自动的：你点「下载 .md」或「复制 Markdown」时就记一条，并反查出这篇用了库存里哪几条素材（大模型改写过的也能认出来）。<b>发布出去跑得好不好，回来点一下 1–5 分就行</b>——素材库从此知道哪块零件真的灵，缺口补件也会优先递表现好的那条。不点也不影响任何功能。</p>
+      </section>
+    </div>
+  </div>
+
+  <!-- ============ 过滤标准抽屉 ============
+       配置不是每天要看的东西。实测：三要素 + 黑名单吃掉整整两屏，
+       稿纸被推到折叠线以下——而稿纸才是这个工具的主角。
+       所以搬进抽屉，主屏只留「粘稿 → 核对 → 出稿 → 攒素材」。 -->
+  <div class="cfg-scrim" id="cfgScrim" data-open="false"></div>
+  <aside class="cfg-drawer" id="cfgDrawer" data-open="false" role="dialog" aria-modal="true" aria-labelledby="cfgTitle">
+    <header class="cfg-head">
+      <h2 id="cfgTitle">过滤标准</h2>
+      <span class="cfg-hint">改完立即对下一次预清洗生效</span>
+      <button class="btn btn-quiet" data-act="close-config" aria-label="关闭过滤标准">关闭</button>
+    </header>
+    <div class="cfg-body">
+      <section class="card">
+        <h2>三要素过滤标准</h2>
+        <div id="factorList"></div>
+        <p class="note">这些标准会写进 Prompt 包，告诉大模型「哪些片段必须留下」。点 × 删除，输入后回车或点「添加」新增。</p>
+      </section>
+      <section class="card">
+        <h2>黑名单（自动删除）</h2>
+        <div class="chips" id="blacklistChips"></div>
+        <div class="row">
+          <label class="sr-only" for="blacklistInput">新增要删除的类型</label>
+          <input type="text" id="blacklistInput" placeholder="加要删除的类型" autocomplete="off">
+          <button class="btn btn-ghost" data-act="add-blacklist">添加</button>
+        </div>
+        <div class="rules" id="ruleList"></div>
+        <div class="rules">
+          <div class="rule" style="gap:10px">
+            <span style="color:#5b6478;font-weight:700">黑名单处理：</span>
+            <div class="seg">
+              <label><input type="radio" name="blMode" value="delete" checked><span>整句删除</span></label>
+              <label><input type="radio" name="blMode" value="mark"><span>只标记【待删】</span></label>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <footer class="foot">
+    <span>所有数据只存在这台电脑的浏览器里（localStorage），不上传。<b>换电脑或重装浏览器前，请先「导出完整备份」。</b></span>
+    <span class="spacer"></span>
+    <span class="kbd-hint" title="桌面端快捷键">快捷键 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 预清洗 · <kbd>Ctrl</kbd>+<kbd>S</kbd> 下载 .md · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> 复制 Prompt · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>M</kbd> 复制终稿</span>
+    <button class="btn btn-quiet" data-act="export-backup"><svg class="ic" aria-hidden="true"><use href="#i-download"></use></svg> 导出完整备份</button>
+    <button class="btn btn-quiet" data-act="import-backup"><svg class="ic" aria-hidden="true"><use href="#i-folder"></use></svg> 导入备份</button>
+    <input type="file" id="importFile" accept=".json,application/json" class="sr-only" aria-label="选择要导入的备份 JSON 文件">
+    <button class="btn btn-quiet" data-act="reset-rules">恢复默认标准</button>
+    <button class="btn btn-quiet" data-act="export-json">只导出标准配置</button>
+    <button class="btn btn-quiet" data-act="wipe">清空全部数据</button>
+  </footer>
+</div>
+
+<div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<script id="core">
+/* =========================================================================
+   CORE —— 纯逻辑层，不碰 DOM，可单独在 Node 里跑测试
+   ========================================================================= */
+const KBCore = (function () {
+
+  /* ---------- 默认标准 ---------- */
+  const DEFAULT_FACTORS = [
+    { key: 'persona', name: '人设', desc: '符合你想表现的形象',
+      items: ['我与客户的故事', '体现能力的细节', '体现情商的反应', '价值观表态'] },
+    { key: 'conversion', name: '转化', desc: '让别人想买你的产品和服务',
+      items: ['可验证的成功案例', '服务/产品介绍', '客户具体结果', '你自己的使用体验'] },
+    { key: 'traffic', name: '流量', desc: '符合短视频爆款选题',
+      items: ['反认知观点', '两类人的对立/矛盾', '争议性立场'] }
+  ];
+
+  /* 内置黑名单 → 匹配模式（命中即处理整句） */
+  const DEFAULT_BLACKLIST = [
+    '寒暄/打招呼', '自我介绍', '开场铺垫', '主持人介绍', '官方头衔陈述', '数据铺垫', '术语解释'
+  ];
+
+  const BLACKLIST_PATTERNS = {
+    '寒暄/打招呼': /大家好|各位(朋友|老板|同学|朋友)?好|你们好|您好|晚上好|早上好|下午好|哈喽|哈啰|(?<![A-Za-z])(?:hello|hi)(?![A-Za-z])|家人们|宝子们|老铁们|朋友们(?=[，,。]|$)|记得(点赞|关注|收藏|转发)|三连|下期见|下次见|拜拜|感谢(观看|收看|聆听)|就(聊|说|分享)到这里|话不多说|废话不多说/i,
+    '自我介绍': /(我是|我叫|我姓|本人是|大家好我是|我是来自)[^，。,；;]{0,24}[，,。]|作为(一个|一名)[^，。,；;]{0,20}[，,。]/,
+    '开场铺垫': /(今天|这期|本期|这一期|接下来|下面)(我们|我|给大家|来|想|将)[^。！？]{0,16}(聊聊|讲讲|分享|说说|介绍|带来|看一下)/,
+    '主持人介绍': /主持人|主持(人)?(老师)?|导播|感谢主持人|把时间交给|连线|直播间(的)?(朋友)?/,
+    '官方头衔陈述': /(现任|担任|身为|我是(一)?(名|位))[^。！？]{0,20}(总监|创始人|CEO|COO|CTO|总经理|副总经理|负责人|董事长|合伙人|会长|站长)|头衔是/,
+    '数据铺垫': /(根据|按照)[^。！？]{0,14}(数据|统计|报告|调研|显示)|数据显示|据统计|数据表明|来自[^。！？]{0,10}的(数据|报告)/,
+    '术语解释': /所谓[^，,]{0,12}|顾名思义|简单来说|通俗(地)?(点)?讲|指的是|是指|什么是[^。！？]{1,12}(呢)?[，,]/
+  };
+
+  /* ---------- 清洗词库 ---------- */
+  // A 类：纯语气字，出现即删（刻意不含「呐/嘶/嘞」——会误伤「呐喊」「嘶哑」等实词）
+  const FILLER_CHARS = ['嗯', '呃', '额', '噢', '哦', '诶', '唔'];
+  // B 类：口头禅词组，出现即删
+  const FILLER_PHRASES = [
+    '怎么说呢', '说白了就是', '反正就是', '然后就是', '其实吧',
+    '大家知道吗', '你们知道吗', '那个什么', '这个那个',
+    'emmm', 'emm', 'balabala'
+  ];
+  // C 类：条件删除 —— 只有「标点之后 + 标点之前」独立成块时才删，避免改坏语义。
+  // 例：「他说我是不是被人坑了」是疑问句，不能当语气词删；「，对吧，」才是口头禅。
+  const FILLER_COND = ['那个', '这个', '啊', '呀', '就是说', '怎么说', '对吧', '是吧',
+                       '是不是', '你懂吧', '懂我意思吧'];
+  // 合法叠词：磕巴折叠时保留 2 个（而不是削成 1 个）
+  const REDUP_OK = new Set([
+    '谢谢', '刚刚', '慢慢', '常常', '好好', '说说', '看看', '想想', '种种', '多多',
+    '满满', '悄悄', '深深', '远远', '点点', '阵阵', '条条', '屡屡', '频频', '单单',
+    '实实', '确确', '快快', '迟迟', '往往', '天天', '年年', '月月', '处处', '人人',
+    '家家', '声声', '稳稳', '准准', '牢牢', '久久', '各各', '门门', '样样', '句句',
+    '整整', '生生', '历历', '翼翼', '层层', '件件', '桩桩', '般般', '色色'
+  ]);
+  // 高磕巴倾向字（代词/助词/虚词）：连写 2 次即判磕巴；其它字要连写 3 次以上才判，
+  // 这样「我我我」→「我」，而「整整」「慢慢」这类叠词不会被误削。
+  const STUTTER_PRONE = new Set([
+    '我', '你', '他', '她', '它', '们', '是', '不', '有', '个', '这', '那', '就', '说',
+    '和', '与', '也', '都', '要', '在', '了', '但', '可', '以', '能', '会', '去', '来',
+    '给', '让', '对', '把', '被', '从', '到', '的', '地', '得', '而', '且', '或', '者',
+    '然', '后', '所', '因', '为', '其', '于', '时', '候', '跟', '像', '该', '嗯', '啊'
+  ]);
+
+  const TIMECODE_RE = /(\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?|\[\s*\d{1,2}:\d{2}(?::\d{1,2})?\s*\]|\d{1,2}分\d{1,2}秒/g;
+
+  /* ---------- 工具 ---------- */
+  function countChars(s) {
+    return String(s || '').replace(/\s/g, '').length;
+  }
+
+  function normalize(text) {
+    return String(text || '')
+      .replace(/\r\n?/g, '\n')
+      .replace(/[\u3000\uff20]/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  /* 按句切分，保留结尾标点；返回 [{t, end}] */
+  function splitSentences(text) {
+    const out = [];
+    const re = /[^。！？!?；;\n]+[。！？!?；;]?/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const raw = m[0];
+      const body = raw.replace(/[。！？!?；;]$/, '');
+      const end = raw.slice(body.length);
+      if (body.trim() === '' && end === '') continue;
+      out.push({ t: raw, body: body, end: end });
+    }
+    return out;
+  }
+
+  function joinSentences(list) {
+    return list.map(s => (typeof s === 'string' ? s : s.t)).join('');
+  }
+
+  function timecodes(text) {
+    const m = String(text || '').match(TIMECODE_RE);
+    return m || [];
+  }
+
+  /* ---------- 单条规则实现 ---------- */
+
+  /* 句子指纹：用于「放回这句」的豁免表。按内容而非位置，所以重放时不受偏移影响 */
+  function sentFingerprint(s) {
+    return String(s).replace(/[\s。，,、！!？?；;：:「」“”()（）\[\]【】]/g, '').slice(0, 90);
+  }
+
+  /* 1. 开头寒暄 */
+  function stripOpeningPleasantries(text, log, keepSet) {
+    const lines = text.split('\n');
+    const pat = /大家好|各位|你们好|您好|哈喽|哈啰|(?<![A-Za-z])(?:hello|hi)(?![A-Za-z])|欢迎(大家|收看|来到)|家人们|宝子们|老铁们|朋友们|我是[^，。]{0,12}|今天(我们|我|给大家)|话不多说|废话不多说|不多说|直接开始|开始(吧|了)|直播(间)?|这期|本期|上一期|记得(关注|点赞|收藏)|三连|点赞关注/;
+    const softPat = /(分享|聊聊|讲讲|介绍|带来|看一下|主题|内容|视频)/;
+    let removed = 0;
+    let stop = false;
+    for (let i = 0; i < Math.min(lines.length, 6); i++) {
+      if (stop) break;
+      const line = lines[i];
+      if (!line || !line.trim()) continue;
+      const sents = splitSentences(line);
+      const survivors = [];
+      for (const s of sents) {
+        const fp = sentFingerprint(s.body);
+        const spared = keepSet && keepSet.has(fp);
+        const isPleas = pat.test(s.body) && (s.body.replace(/\s/g, '').length <= 26 || softPat.test(s.body));
+        if (isPleas && survivors.length === 0 && !spared) {
+          removed++;
+          log('rules.opening', s.t.trim(), '', { fp, kind: 'sentence', rule: '开头寒暄' });
+        } else {
+          survivors.push(s);
+          stop = true; // 遇到第一句实质内容后不再往前删
+        }
+      }
+      lines[i] = joinSentences(survivors);
+    }
+    return {
+      text: lines.join('\n').replace(/^\n+/, ''),
+      hits: removed,
+      label: '识别并删除开头寒暄'
+    };
+  }
+
+  /* 2. 黑名单整句 */
+  function applyBlacklist(text, blacklist, mode, log, keepSet) {
+    const compiled = [];
+    for (const name of blacklist) {
+      const src = BLACKLIST_PATTERNS[name];
+      if (src) { compiled.push({ name, re: new RegExp(src.source, src.flags) }); continue; }
+      // 自定义项：按字面短语匹配（转义正则元字符）
+      const esc = String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (esc.length >= 2) compiled.push({ name, re: new RegExp(esc) });
+    }
+    const lines = text.split('\n');
+    const out = [];
+    let hits = 0;
+    const byName = {};
+    for (const line of lines) {
+      const sents = splitSentences(line);
+      const survivors = [];
+      for (const s of sents) {
+        const hit = compiled.find(c => c.re.test(s.body));
+        const fp = sentFingerprint(s.body);
+        const spared = keepSet && keepSet.has(fp);
+        if (hit && !spared) {
+          hits++;
+          byName[hit.name] = (byName[hit.name] || 0) + 1;
+          if (mode === 'mark') {
+            log('blacklist', s.t.trim(), hit.name, { fp, kind: 'sentence', rule: hit.name });
+            survivors.push({ t: '【待删·' + hit.name + '】' + s.t });
+          } else {
+            log('blacklist', s.t.trim(), hit.name, { fp, kind: 'sentence', rule: hit.name });
+          }
+        } else {
+          survivors.push(s);
+        }
+      }
+      const joined = joinSentences(survivors).trim();
+      if (joined !== '') out.push(joined);
+      /* 空行是「故事分段」的唯一视觉线索，不能被当作空行丢掉，否则下游再也分不出段 */
+      else if (!line.trim() && out.length && out[out.length - 1] !== '') out.push('');
+    }
+    return { text: out.join('\n'), hits, byName, label: '黑名单句子（' + mode + '）' };
+  }
+
+
+  /* 3. 语气词 —— 只删词，不吞标点；标点交给收尾统一整理，
+        这样后面的条件类规则仍能靠标点边界判断「那个/就是说」是不是口头禅 */
+  function stripFillers(text, log) {
+    let t = text;
+    let n = 0;
+    for (const p of FILLER_PHRASES) {
+      const esc = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(esc, 'gi');
+      t = t.replace(re, () => { n++; log('rules.filler', p); return ''; });
+    }
+    for (const c of FILLER_CHARS) {
+      const re = new RegExp(c, 'g');
+      t = t.replace(re, () => { n++; log('rules.filler', c); return ''; });
+    }
+    // 条件类：只在标点边界上独立成块时删
+    for (const c of FILLER_COND) {
+      const esc = c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('(^|[，,。！!？?；;\\s])' + esc + '(?=[，,、。！!？?；;\\s])', 'g');
+      t = t.replace(re, (mm, pre) => { n++; log('rules.filler', mm + ' → ' + (pre || '句首')); return pre; });
+    }
+    // 修掉被删空的标点。字符类里绝不能放 \s —— 它含换行，会把段落之间的空行整个吃掉，
+    // 下游「按故事段检测缺口」就永远分不出段。只清水平空白。
+    t = t.replace(/([，,、])\1+/g, '$1')
+         .replace(/[，,、][ \t]*([。！？；!?])/g, '$1')
+         .replace(/(^|\n)[，,、 \t]+/g, '$1');
+    return { text: t, hits: n, label: '去语气词' };
+  }
+
+  /* 4. 磕巴重复字 —— 三层判定，宁可漏删也不改坏语义 */
+  function stripStutter(text, log) {
+    let n = 0;
+    const t = String(text).replace(/(.)\1+/g, (mm, ch) => {
+      const dup = mm.length;
+      if (REDUP_OK.has(ch + ch)) {                 // 合法叠词：谢谢/慢慢/整整…
+        if (dup > 2) { n++; log('rules.stutter', mm + ' → ' + ch + ch); return ch + ch; }
+        return mm;                                 // 正好 2 次，原样保留
+      }
+      if (STUTTER_PRONE.has(ch) || dup >= 3) {     // 虚词连写 2 次 / 任何字连写 3 次以上
+        n++; log('rules.stutter', mm + ' → ' + ch); return ch;
+      }
+      return mm;                                   // 其余 2 连字判为正常用词，保留
+    });
+    return { text: t, hits: n, label: '删除磕巴和重复字' };
+  }
+
+  /* 5. 合并重复表达 —— 子句级 n-gram 去重
+     口播里最常见的重复是「同一件事换口气再说一遍」，它可能跨行、可能带「所以说」这种引导词，
+     所以比对粒度取「子句」，比对时忽略标点，并允许 1~4 个子句组成的片段整体重复。 */
+  function tokenizeClauses(text) {
+    const out = [];
+    String(text).split('\n').forEach((line, li) => {
+      const re = /[^。！？!?；;，,、]+[。！？!?；;，,、]?/g;
+      let m;
+      while ((m = re.exec(line)) !== null) {
+        const raw = m[0];
+        const norm = raw.replace(/[\s。，,、！!？?；;]/g, '');
+        if (!norm) continue;
+        out.push({ raw, norm, line: li });
+      }
+    });
+    return out;
+  }
+
+  function renderTokens(tokens) {
+    let s = '', cur = tokens.length ? tokens[0].line : 0;
+    tokens.forEach((t, i) => {
+      if (i && t.line !== cur) {
+        /* 行号跳了 1 以上，说明中间原本有空行 → 还原成段落分隔 */
+        s += (t.line > cur + 1 ? '\n\n' : '\n');
+        cur = t.line;
+      }
+      s += t.raw;
+    });
+    return s;
+  }
+
+  function mergeRepeats(text, log) {
+    const tokens = tokenizeClauses(text);
+    let n = 0, guard = 0, changed = true;
+
+    while (changed && guard++ < 60) {
+      changed = false;
+
+      // 5a：连续 k 个子句整体重复（k 从大到小，优先合并长段）
+      outer:
+      for (let k = 4; k >= 1; k--) {
+        for (let i = k; i + k <= tokens.length; i++) {
+          const A = tokens.slice(i - k, i).map(t => t.norm).join('|');
+          const B = tokens.slice(i, i + k).map(t => t.norm).join('|');
+          if (A && B && A === B) {
+            const gone = tokens.splice(i, k);
+            n++;
+            log('rules.dedupe', '重复' + k + '子句 → ' + gone.map(t => t.raw).join(''));
+            changed = true;
+            break outer;
+          }
+        }
+      }
+      if (changed) continue;
+
+      // 5b：下句正好是上句的尾巴（「你就不会多花冤枉钱，不会多花冤枉钱」）
+      for (let i = 1; i < tokens.length; i++) {
+        const a = tokens[i - 1].norm, b = tokens[i].norm;
+        if (b.length >= 4 && a.length > b.length && a.endsWith(b)) {
+          const gone = tokens.splice(i, 1)[0];
+          n++;
+          log('rules.dedupe', '尾句重复 → ' + gone.raw);
+          changed = true;
+          break;
+        }
+      }
+    }
+
+    return { text: renderTokens(tokens), hits: n, label: '合并重复表达' };
+  }
+
+  /* 6. 收尾整理：空行、孤立标点、行尾逗号补成句号 */
+  function tidy(text) {
+    return String(text)
+      .split('\n')
+      .map(l => l.trim())
+      .map(l => l.replace(/[，,、]+$/, '。'))     // 去重后可能留下逗号收尾
+      .map(l => l.replace(/((?:\d{1,2}:)?\d{1,2}:\d{2}(?:[.,]\d{1,3})?|\[\s*\d{1,2}:\d{2}(?::\d{2})?\s*\])\s*[，,、]+/g, '$1 '))
+      .map(l => l.replace(/([。！？])\1+/g, '$1'))
+      .filter(l => l === '' || l.replace(/[\s。，,！!？?；;、]/g, '') !== '' || /^\s*\d{1,2}:\d{2}/.test(l))
+      .join('\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .replace(/^\n+/, '').replace(/\n+$/, '')
+      .trim();
+  }
+
+  /* ---------- 预清洗主流程 ---------- */
+  function preclean(raw, opts) {
+    const o = opts || {};
+    const rules = o.rules || {};
+    const blacklist = o.blacklist || [];
+    const mode = o.blacklistMode || 'delete';
+    const keep = o.keep instanceof Set ? o.keep : new Set(o.keep || []);
+    const events = [];
+    const log = (bucket, sample, extra, meta) => {
+      if (events.length < 500) events.push(Object.assign({ bucket, sample, extra: extra || '' }, meta || {}));
+    };
+
+    const steps = [];
+    let text = normalize(raw);
+    const before = countChars(text);
+
+    if (rules.opening) {
+      const r = stripOpeningPleasantries(text, log, keep);
+      text = r.text; steps.push({ key: 'rules.opening', label: r.label, hits: r.hits });
+    } else steps.push({ key: 'rules.opening', label: '识别并删除开头寒暄', hits: 0, off: true });
+
+    if (blacklist.length) {
+      const r = applyBlacklist(text, blacklist, mode, log, keep);
+      text = r.text; steps.push({ key: 'blacklist', label: mode === 'mark' ? '黑名单标记【待删】' : '黑名单整句删除', hits: r.hits, byName: r.byName });
+    }
+
+    if (rules.filler) {
+      const r = stripFillers(text, log);
+      text = r.text; steps.push({ key: 'rules.filler', label: r.label, hits: r.hits });
+    } else steps.push({ key: 'rules.filler', label: '去语气词', hits: 0, off: true });
+
+    if (rules.stutter) {
+      const r = stripStutter(text, log);
+      text = r.text; steps.push({ key: 'rules.stutter', label: r.label, hits: r.hits });
+    } else steps.push({ key: 'rules.stutter', label: '删除磕巴和重复字', hits: 0, off: true });
+
+    if (rules.dedupe) {
+      const r = mergeRepeats(text, log);
+      text = r.text; steps.push({ key: 'rules.dedupe', label: r.label, hits: r.hits });
+    } else steps.push({ key: 'rules.dedupe', label: '合并重复表达', hits: 0, off: true });
+
+    text = tidy(text);
+    const after = countChars(text);
+    const classified = classifyParts(text);
+
+    return {
+      text,
+      before,
+      after,
+      saved: Math.max(0, before - after),
+      ratio: before ? Math.round((before - after) / before * 100) : 0,
+      sentences: splitSentences(text).length,
+      timecodes: timecodes(text).length,
+      steps,
+      events,
+      parts: classified,
+      gaps: storyGaps(classified),
+      ep: episodeGaps(text),
+      risk: scanRisk(text)
+    };
+  }
+
+  /* ---------- 素材体检：疑似可剪片段 ---------- */
+  const GEM = {
+    number: /\d|[一二三四五六七八九十百千万]\s*(个|次|天|元|块|万|倍|成|岁|年|月|小时|分钟|人|单|家)/,
+    turn: /(但|其实|不是|而是|反而|却|偏偏|可是|然而|根本|压根|并不是|没有|别)/,
+    emotion: /(离谱|傻|骗|坑|后悔|真相|内幕|亏|垃圾|割韭菜|千万别|一定要|禁忌|血泪|翻车|白给|冤大头|醒醒|活该|白扔|炸|绝了|无语|气死|真香)/,
+    /* 不能放裸「我/他/她」——口播稿几乎每句都有，标签会变成人人命中，等于没有信息。
+       要求带具体的叙事标记才算「第一人称故事」。 */
+    story: /(有个|有一个|上次|那天|当时|前阵子|上个月|昨天|我接了|我遇到|我碰见|我手上|客户找我|他找我|她找我|我那个|后来他|后来她|结果他|结果她|他后来|她后来)/,
+    money: /(钱|元|块|万|成本|利润|赚|亏|价|费用|回报|毛利)/
+  };
+
+  function scoreSentences(text) {
+    const sents = splitSentences(text);
+    const out = [];
+    for (const s of sents) {
+      const body = s.body.replace(/\s+/g, ' ').trim();
+      const clean = body.replace(TIMECODE_RE, '').trim();
+      const len = countChars(clean);
+      if (len < 8 || len > 120) continue;
+      let score = 0;
+      const tags = [];
+      if (GEM.number.test(clean)) { score += 2; tags.push('有具体数字'); }
+      if (GEM.turn.test(clean)) { score += 2; tags.push('有转折/对立'); }
+      if (GEM.emotion.test(clean)) { score += 2; tags.push('带情绪钩子'); }
+      if (GEM.story.test(clean)) { score += 2; tags.push('第一人称故事'); }
+      if (GEM.money.test(clean)) { score += 1; tags.push('涉及钱'); }
+      if (len >= 15 && len <= 45) { score += 2; tags.push('长度适合一条切片'); }
+      else if (len > 80) { score -= 2; tags.push('偏长·建议拆'); }
+      const code = (body.match(TIMECODE_RE) || [])[0] || '';
+      out.push({ text: clean, score, tags, code, len });
+    }
+    out.sort((a, b) => b.score - a.score || a.len - b.len);
+    return out;
+  }
+
+  /* ---------- 按故事段检测缺口 ----------
+     一篇稿子常讲两个客户故事。全稿口径会让 B 故事的结果掩盖 A 故事的窟窿，报出假的「零件齐」。
+     分段依据：空行优先；没有空行就靠时间码的大跳（>60s）；两者都没有＝单段，行为与全稿一致。 */
+  function parseSec(code) {
+    if (!code) return null;
+    const p = String(code).replace(/[\[\]]/g, '').split(':').map(Number);
+    if (p.some(n => isNaN(n))) return null;
+    return p.length === 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p.length === 2 ? p[0] * 60 + p[1] : p[0];
+  }
+
+  function splitEpisodes(text) {
+    const t = String(text || '');
+    if (!t.trim()) return [];
+    const byBlank = t.split(/\n[ \t]*\n/).map(s => s.trim()).filter(Boolean);
+    if (byBlank.length > 1) return byBlank;
+    const lines = t.split('\n');
+    const eps = [];
+    let cur = [], last = null;
+    lines.forEach(line => {
+      if (!line.trim()) return;
+      const m = line.match(TIMECODE_RE);
+      const sec = m ? parseSec(m[0]) : null;
+      if (sec !== null && last !== null && sec - last > 60) {
+        if (cur.length) eps.push(cur.join('\n'));
+        cur = [];
+      }
+      cur.push(line);
+      if (sec !== null) last = sec;
+    });
+    if (cur.length) eps.push(cur.join('\n'));
+    return eps.length > 1 ? eps : [t.trim()];
+  }
+
+  /* 返回 { episodes, blocks:[{no, excerpt, counts, gaps}] } */
+  function episodeGaps(text) {
+    const eps = splitEpisodes(text);
+    const blocks = [];
+    eps.forEach((e, i) => {
+      const cl = classifyParts(e);
+      if (!cl.total) return;
+      const gaps = storyGaps(cl);
+      blocks.push({
+        no: i + 1,
+        excerpt: String(e).split('\n')[0].replace(TIMECODE_RE, '').trim().slice(0, 24),
+        counts: cl.counts,
+        total: cl.total,
+        gaps
+      });
+    });
+    return { episodes: eps.length, blocks };
+  }
+
+  /* 把缺口统一成 [{seg, g}]：多段时带段标签，单段时沿用全稿口径 */
+  function gapLines(gaps, ep) {
+    const out = [];
+    if (ep && ep.episodes > 1) {
+      ep.blocks.forEach(b => b.gaps.forEach(g => out.push({ seg: '第 ' + b.no + ' 段「' + b.excerpt + '」', g: g })));
+    } else {
+      (gaps || []).forEach(g => out.push({ seg: '', g: g }));
+    }
+    return out;
+  }
+
+  /* ---------- 合规风险：极限词 / 违禁表述 ---------- */
+  /* 命中不删除，只标风险并给改口建议。故事型口播最大的坑是「拿绝对化的话替客户下结论」 */
+  const RISK_CATS = [
+    { key: 'abs', name: '绝对化用语', level: 'high',
+      why: '《广告法》第九条禁止「国家级」「最高级」「最佳」等绝对化用语，平台会限流，同行举报一告一个准',
+      fix: '换成有主体、有范围的比较：「在我做过的活里算省心的」「我们这条街上算便宜的」',
+      words: ['最好', '最佳', '最优', '最强', '最便宜', '最划算', '最实惠', '最专业', '最先进', '最良心',
+              '第一', '唯一', '仅有', '顶级', '极致', '完美', '万能', '独家', '首家', '首发', '史上',
+              '国家级', '世界级', '全网最低', '行业第一', '销量第一', '无可比拟', '无敌', '终极'] },
+    { key: 'promise', name: '效果承诺', level: 'high',
+      why: '对效果的绝对承诺是投诉与处罚的高发点，一旦客户预期没达到，这句话就是证据',
+      fix: '改成可核验的事实：「到目前为止我手上 37 单，没有一单返工」',
+      words: ['保证', '包好', '包过', '包满意', '包退', '一定能', '肯定能', '绝对能', '100%', '百分百', '百分之百',
+              '绝对', '稳赚', '必赚', '无效退款', '无效包退', '假一赔十', '零风险', '终身', '永久', '永不',
+              '立竿见影', '马上见效', '一次就好', '绝不反弹'] },
+    { key: 'medical', name: '功效/医疗暗示', level: 'high',
+      why: '非医疗、非保健食品资质不得宣称功效，餐饮和服务业最容易在「养生」「养胃」上翻车',
+      fix: '只讲自身体验，不下功效结论：「我吃完胃里舒服些」而不是「养胃」',
+      words: ['治疗', '治愈', '根治', '疗效', '药用', '消炎', '杀菌', '抗菌', '防癌', '抗癌', '降三高',
+              '降血压', '降血糖', '降火', '减肥', '瘦身', '燃脂', '排毒', '祛湿', '去湿', '养胃', '护胃',
+              '壮阳', '补肾', '提高免疫', '增强免疫', '安神', '助眠'] },
+    { key: 'unprovable', name: '全称判断 / 无法举证', level: 'mid',
+      why: '「所有客户都说」这类全称判断无法举证，容易被认定为虚假宣传；真实案例也要能拿出凭据',
+      fix: '限定范围并给出数：「做过的 40 多户里，有 3 户后来介绍了邻居」',
+      words: ['所有客户', '每个客户', '全部客户', '零差评', '0差评', '好评第一', '口碑第一', '回头率',
+              '客户都说', '大家都说', '无一例外', '从没失手', '从未失手', '0投诉', '零投诉', '满意度'] },
+    { key: 'pressure', name: '虚假紧迫 / 诱导', level: 'mid',
+      why: '限时促销必须有真实期限，「亏本」「白送」等表述易被认定价格误导',
+      fix: '说清原因和真实期限：「这个价做到月底，因为材料这批进得便宜」',
+      words: ['错过就没有', '错过等一年', '最后一天', '最后1天', '最后三天', '仅剩', '限时', '秒杀',
+              '清仓', '亏本', '跳楼价', '白菜价', '白送', '不要钱', '免费领', '不买后悔'] },
+    { key: 'disparage', name: '贬低同行 / 蹭背书', level: 'mid',
+      why: '不得贬低其他生产经营者，也不得虚构「央视推荐」「政府指定」等背书',
+      fix: '只讲自己的做法和标准，不评价别人家',
+      words: ['别家都是坑', '同行都是', '其他家都', '别的公司都是', '都是骗子', '全是垃圾', '比任何一家',
+              '央视推荐', '央视同款', '政府指定', '国家指定', '指定品牌', '特供', '专供'] }
+  ];
+
+  /* 误报防护：这些前缀/后缀让词不算命中 */
+  const RISK_GUARD = {
+    '第一': /(第一次|第一天|第一回|第一步|第一周|第一季度|第一年|一个月|第一位|先讲第一|第一，|第一、)/,
+    '终身': /(终身学习|终身成长)/,
+    '绝对': /(绝对值)/,
+    '仅剩': /(仅剩我一人)/
+  };
+
+  function scanRisk(text) {
+    const hits = [];
+    const sents = splitSentences(String(text || ''));
+    for (const s of sents) {
+      const body = s.body.trim();
+      if (!body) continue;
+      for (const cat of RISK_CATS) {
+        for (const w of cat.words) {
+          let idx = body.indexOf(w);
+          while (idx !== -1) {
+            const around = body.slice(Math.max(0, idx - 6), idx + w.length + 6);
+            const guarded = RISK_GUARD[w] && RISK_GUARD[w].test(around);
+            if (!guarded) {
+              hits.push({
+                cat: cat.name, key: cat.key, level: cat.level, word: w,
+                sentence: body, why: cat.why, fix: cat.fix,
+                code: (body.match(TIMECODE_RE) || [])[0] || ''
+              });
+            }
+            idx = body.indexOf(w, idx + w.length);
+          }
+        }
+      }
+    }
+    // 同一句同类合并成一条，但把所有命中词都带上（不然一句里三个功效词只报一个，等于漏报）
+    const merged = [];
+    const index = {};
+    for (const h of hits) {
+      const k = h.cat + '|' + h.sentence;
+      if (index[k] === undefined) {
+        index[k] = merged.length;
+        merged.push(Object.assign({}, h, { words: [h.word] }));
+      } else {
+        const t = merged[index[k]];
+        if (t.words.indexOf(h.word) === -1) t.words.push(h.word);
+      }
+    }
+    merged.forEach(h => { h.word = h.words.join('、'); });
+    return merged;
+  }
+
+  /* ---------- 故事零件分桶（我 vs 客户 的故事型口播） ---------- */
+  const PART_DEFS = [
+    { key: 'conflict', name: '冲突/对立', role: '故事的发动机',
+      re: /(质疑|不信|不相信|觉得贵|嫌贵|嫌太|犹豫|观望|对比了|比了几|比了\w|选了别|找了别|不认可|唱反调|吵架|争执|争执|不欢而散|退钱|退款|投诉|闹|被骗|被坑|坑了|骗了|他说我|问我是不是|别人都说|同行说|老婆不同意|家里人反对|先拒绝)/ },
+    { key: 'turn', name: '转折/我的动作', role: '你的人设落点',
+      re: /(我说|我跟他说|我跟她说|我跟他讲|我告诉她|我告诉他|我让他|我带他|我给她|我给他|我坚持|我宁可|我没收|我没接|我没要|我主动|我把|我劝|我提醒|我当场|我当天|我马上|我立刻|我索性|我干脆|我直接|我反倒|我偏|我做生意|我少收|我贴|我垫|我自己出|我认了|我拒绝|我劝他)/ },
+    { key: 'quote', name: '客户原话', role: '真实感的来源',
+      re: /(他说|她说|他讲|她讲|客户说|对方说|来了一句|冒一句|回了一句|打电话说|微信(上)?说|发(了)?(一条|个)微信|「[^」]+」|“[^”]+”|声音都是抖|他当时就)/ },
+    { key: 'result', name: '带数字的结果', role: '可信的证据',
+      re: /(\d+\s*(块|元|万|千|天|个月|年|单|户|家|次|个点|%|平方|米|米数)|[一二两三四五六七八九十百千万]+\s*(块|元|万|千|天|个月|年|单|户|家|次|成|倍))|满意|回头|介绍(了|我)|复购|返工|追加|签了?合同|又来找|成了?老客|推荐给别人/ },
+    { key: 'detail', name: '真实细节', role: '把故事钉在现实里',
+      re: /(上个月|上个月底|那天|当时|当天|凌晨|早上|中午|晚上|半夜|小区|工地|门店|店里|后厨|厂房|写字楼|位置|地址|门牌|姓[王李张刘陈杨黄赵周吴徐孙]|王姐|李哥|张阿姨|刘叔|大姐|大哥|大爷|新房|二手房|老破小|出租房|婚房|拆迁)/ },
+    { key: 'belief', name: '价值观金句', role: '让人记住你是谁',
+      re: /(我一直|我从来|我做生意|我的原则|我认|我不认|不是.{0,12}而是|宁可|值不值|便宜不是|才是|记住|说白了|本质上|为什么|所以我)/ }
+  ];
+
+  function classifySentence(body) {
+    const parts = [];
+    for (const d of PART_DEFS) {
+      d.lastIndex = 0;
+      if (d.re.test(body)) parts.push(d.key);
+    }
+    return parts;
+  }
+
+  /* 返回每句的零件归属 + 每个桶的计数 */
+  function classifyParts(text) {
+    const sents = splitSentences(String(text || ''));
+    const counts = {};
+    const items = [];
+    PART_DEFS.forEach(d => counts[d.key] = 0);
+    sents.forEach((s, i) => {
+      const body = s.body.replace(TIMECODE_RE, '').trim();
+      const len = countChars(body);
+      if (len < 6) return;
+      const parts = classifySentence(body);
+      parts.forEach(p => counts[p]++);
+      items.push({ i, text: body, code: (s.body.match(TIMECODE_RE) || [])[0] || '', parts, len });
+    });
+    return { counts, items, total: items.length };
+  }
+
+  /* ---------- 字符 bigram 相似度（本地、零依赖，够抓「近乎原句的重复」） ---------- */
+  function bigramSet(chars) {
+    const set = new Set();
+    for (let i = 0; i < chars.length - 1; i++) set.add(chars[i] + chars[i + 1]);
+    if (!set.size && chars.length) set.add(chars[0]);
+    return set;
+  }
+
+  function bigrams(s) { return bigramSet(toChars(s)); }
+
+  function toChars(s) {
+    return Array.from(String(s).replace(/[\s\p{P}\p{S}]/gu, ''));
+  }
+
+  /* 最长公共子序列长度 —— 对换序/插入宽容，对内容不同敏感 */
+  function lcsLen(A, B) {
+    let prev = new Array(B.length + 1).fill(0);
+    for (let i = 1; i <= A.length; i++) {
+      const cur = new Array(B.length + 1).fill(0);
+      for (let j = 1; j <= B.length; j++) {
+        cur[j] = A[i - 1] === B[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], cur[j - 1]);
+      }
+      prev = cur;
+    }
+    return prev[B.length];
+  }
+
+  function similarity(a, b) {
+    const A = toChars(a), B = toChars(b);
+    if (!A.length || !B.length) return 0;
+    const ga = bigramSet(A), gb = bigramSet(B);
+    let inter = 0;
+    ga.forEach(x => { if (gb.has(x)) inter++; });
+    const jac = inter / (ga.size + gb.size - inter);
+    /* 只靠 bigram 会把「上个月有个客户…」这种套路开头判成重复；
+       LCS 比率才能把「换序说第二遍」和「同一个开头讲两件不同的事」分开 */
+    const lcsR = lcsLen(A, B) / Math.min(A.length, B.length);
+    return Math.max(jac, lcsR);
+  }
+
+  /* 判重阈值与长度门槛：短句共用开头很常见，不设门槛会全是假阳性 */
+  const SIM_DUP = 0.62;
+
+  /* 功能字（虚词/代词/助词/框架词）。故事型口播高度依赖固定句式，
+     「我一直跟我自己讲…」这种框架会被 LCS 判成相似，必须先看实词是否真的重合。
+     注意：数字和量词刻意不列入——「三万五」「两个邻居」正是故事的关键信息。 */
+  const FUNC_CHARS = new Set(('的了吗呢吧啊呀哦嗯哈就是不是也都有还又很更太这那个们我你他她它自己' +
+    '来去上下中对把被从到给让使会能要和与或但而且却则于之所为后前时候么儿各样点没每直干脆' +
+    '反正其实然后因为如果虽然可以一样这么那么怎么').split(''));
+
+  function contentChars(s) {
+    const set = new Set();
+    toChars(s).forEach(c => { if (!FUNC_CHARS.has(c)) set.add(c); });
+    return set;
+  }
+
+  /* 实词重合度：两句去掉虚词框架后，内容字的重叠比例 */
+  function contentOverlap(a, b) {
+    const A = contentChars(a), B = contentChars(b);
+    if (!A.size || !B.size) return 0;
+    let inter = 0;
+    A.forEach(c => { if (B.has(c)) inter++; });
+    return inter / (A.size + B.size - inter);
+  }
+
+  function isDuplicate(a, b) {
+    const la = countChars(a), lb = countChars(b);
+    if (la < 12 || lb < 12) return false;
+    if (Math.min(la, lb) / Math.max(la, lb) < 0.5) return false;
+    if (similarity(a, b) < SIM_DUP) return false;
+    return contentOverlap(a, b) >= 0.5;   // 只共享句式框架的不算重复
+  }
+
+  /* ---------- 故事结构缺口 ---------- */
+  function storyGaps(classified) {
+    const c = classified.counts;
+    const gaps = [];
+    const has = k => c[k] > 0;
+
+    if (has('conflict') && !has('result')) gaps.push({
+      missing: 'result', severity: 'high',
+      what: '有冲突，但没有一个带数字或明确变化的结果',
+      why: '故事型口播最致命的就是「情绪讲满了，证据没落地」——观众看完只记得你受委屈，不记得你办成了什么。',
+      how: '补一句具体结果：省了多少、几天完工、有没有回头介绍别人。数字要能拿得出手。'
+    });
+    if ((has('conflict') || has('turn')) && !has('quote')) gaps.push({
+      missing: 'quote', severity: 'high',
+      what: '全程没有客户原话',
+      why: '没有直接引语的故事听像转述，可信度掉一档。客户当时那句话，往往比你的总结更有杀伤力。',
+      how: '把客户说过的话原样搬进来，带「他说」「她当时就一句」。'
+    });
+    if (!has('detail')) gaps.push({
+      missing: 'detail', severity: 'mid',
+      what: '没有把故事钉住的具体细节（时间/地点/人物/金额）',
+      why: '「有个客户」和「上个月翡翠湾一个姓李的业主」，后者才让人觉得你真干过。',
+      how: '补时间、小区或场景、人物称呼、金额，至少一样。'
+    });
+    if (has('belief') && !has('conflict')) gaps.push({
+      missing: 'conflict', severity: 'mid',
+      what: '只有观点和金句，没有事',
+      why: '全是「我做生意从不坑人」这类表态，没有具体事件支撑，容易变成说教，完播率最差。',
+      how: '挑一个你拒绝过客户、或者跟客户起分歧的真实片段垫在前面。'
+    });
+    const resultSents = classified.items.filter(x => x.parts.indexOf('result') !== -1);
+    const NUM_RE = /\d|[一二两三四五六七八九十百千万]\s*(块|元|万|千|天|单|户|家|次|成|倍|个月|年|平方|米|%)/;
+    if (resultSents.length && !resultSents.some(x => NUM_RE.test(x.text))) gaps.push({
+      missing: 'result', severity: 'low',
+      what: '有结果，但结果里没有数字',
+      why: '「他挺满意」不算结果，「多花了三万五」才算。',
+      how: '给结果加一个可比的数量。'
+    });
+    const kinds = PART_DEFS.filter(d => has(d.key)).length;
+    if (classified.total >= 3 && kinds < 4) gaps.push({
+      missing: 'structure', severity: 'mid',
+      what: '故事零件只有 ' + kinds + ' 类，结构偏薄',
+      why: '一个立得住的口播故事通常要有：冲突 → 我的动作 → 客户反应 → 结果 → 我的立场。',
+      how: '从库存里挑一条没用过的零件补上，别硬编。'
+    });
+    return gaps;
+  }
+
+
+  /* ---------- 成片记录：让素材库知道哪块零件真的好用 ---------- */
+  /* 登记动作要「免费」：下载/复制终稿时自动记一条，用户之后只需补一次 1-5 星 */
+  function makeTake(data) {
+    const d = data || {};
+    return {
+      id: d.id || ('t' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)),
+      title: String(d.title || '').trim() || '未命名成片',
+      createdAt: d.createdAt || Date.now(),
+      score: d.score || 0,
+      chars: countChars(d.final || ''),
+      /* 存正文才让「成片记录」成为档案而不只是计数器：老片子要复看/复剪能拿回来。
+         上限防 localStorage 配额（中文按 UTF-16 计，12k 字约 24KB）。 */
+      body: String(d.final || '').slice(0, 12000),
+      truncated: countChars(d.final || '') > 12000,
+      parts: d.parts || {},
+      risk: d.risk || 0,
+      used: d.used || []
+    };
+  }
+
+  /* 从成片记录里反解出正文（旧数据没存 body 时返回空，调用方要能处理） */
+  function takeBody(t) {
+    return (t && typeof t.body === 'string') ? t.body : '';
+  }
+
+  /* 从最终稿反查用了库存里哪些素材：
+     整句搬过去的用子串命中，大模型改写过的退化为相似度命中 */
+  function matchVault(finalText, vault, threshold) {
+    const th = threshold || 0.72;
+    const flat = String(finalText || '').replace(/[\s。，,、！!？?；;「」『』""''']/g, '');
+    if (flat.length < 8) return [];
+    const sents = splitSentences(finalText)
+      .map(s => s.body.replace(TIMECODE_RE, '').trim())
+      .filter(s => countChars(s) >= 8);
+    const out = [];
+    (vault || []).forEach(v => {
+      const probe = String(v.text || '').replace(/[\s。，,、！!？?；;「」『』""''']/g, '');
+      if (probe.length < 8) return;
+      const head = probe.slice(0, 16);
+      if (head.length >= 8 && flat.includes(head)) { out.push(v.id); return; }
+      if (sents.some(s => similarity(v.text, s) >= th)) out.push(v.id);
+    });
+    return out;
+  }
+
+  function vaultStats(vault, takes) {
+    const map = {};
+    (vault || []).forEach(v => { map[v.id] = { usedIn: [], scores: [] }; });
+    (takes || []).forEach(t => {
+      (t.used || []).forEach(id => {
+        if (!map[id]) map[id] = { usedIn: [], scores: [] };
+        if (map[id].usedIn.indexOf(t.id) === -1) map[id].usedIn.push(t.id);
+        if (t.score > 0) map[id].scores.push(t.score);
+      });
+    });
+    Object.keys(map).forEach(k => {
+      const m = map[k];
+      m.count = m.usedIn.length;
+      m.samples = m.scores.length;
+      m.avg = m.samples ? m.scores.reduce((a, b) => a + b, 0) / m.samples : 0;
+    });
+    return map;
+  }
+
+  /* 补件候选排序：没用过的优先（别浪费库存），同使用次数下历史表现好的优先 */
+  function rankCandidates(pool, stats, n) {
+    return (pool || []).slice().sort((a, b) => {
+      const sa = stats[a.id] || {}, sb = stats[b.id] || {};
+      const ca = sa.count || 0, cb = sb.count || 0;
+      if (ca !== cb) return ca - cb;
+      const aa = sa.avg || 0, ab = sb.avg || 0;
+      if (aa !== ab) return ab - aa;
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    }).slice(0, n || 2);
+  }
+
+  function librarySort(vault, stats, mode) {
+    const arr = (vault || []).slice();
+    const g = id => stats[id] || {};
+    if (mode === 'perf') {
+      arr.sort((a, b) => (g(b.id).avg || 0) - (g(a.id).avg || 0) || (g(b.id).count || 0) - (g(a.id).count || 0));
+    } else if (mode === 'busy') {
+      arr.sort((a, b) => (g(b.id).count || 0) - (g(a.id).count || 0));
+    } else {
+      arr.sort((a, b) => (g(a.id).count || 0) - (g(b.id).count || 0) || (b.createdAt || 0) - (a.createdAt || 0));
+    }
+    return arr;
+  }
+
+  /* 库存体检：哪类零件堆着没人用、哪类最灵、哪类根本没存货 */
+  function vaultInsights(vault, takes) {
+    const stats = vaultStats(vault, takes);
+    const byPart = {};
+    PART_DEFS.forEach(d => {
+      const list = (vault || []).filter(v => (v.parts || []).indexOf(d.key) !== -1);
+      const scored = list.map(v => (stats[v.id] || {}).avg || 0).filter(x => x > 0);
+      byPart[d.key] = {
+        name: d.name,
+        total: list.length,
+        unused: list.filter(v => !((stats[v.id] || {}).count > 0)).length,
+        avg: scored.length ? +(scored.reduce((a, b) => a + b, 0) / scored.length).toFixed(1) : 0,
+        samples: scored.length
+      };
+    });
+    const rated = (takes || []).filter(t => t.score > 0);
+    return {
+      byPart, stats,
+      takes: (takes || []).length,
+      rated: rated.length,
+      avg: rated.length ? +(rated.reduce((a, t) => a + t.score, 0) / rated.length).toFixed(1) : 0
+    };
+  }
+
+  /* 一条成片缺什么零件：用零件计数快照判断，不重新解析文本 */
+  function takeGaps(parts) {
+    const has = k => (parts || {})[k] > 0;
+    const miss = [];
+    if (has('conflict') && !has('result')) miss.push('result');
+    if ((has('conflict') || has('turn')) && !has('quote')) miss.push('quote');
+    if (!has('detail')) miss.push('detail');
+    if (has('belief') && !has('conflict')) miss.push('conflict');
+    return miss;
+  }
+
+  /* ---------- 备份与合并（换浏览器/重装时保住攒下来的战绩） ---------- */
+  function isBackup(o) {
+    return !!o && typeof o === 'object' && Array.isArray(o.vault) && Array.isArray(o.takes) && Array.isArray(o.factors);
+  }
+
+  /* 合并而非覆盖：本机新攒的素材不能被一份旧备份冲掉。
+     重复素材按原文判重；成片按「标题+字数」判重。
+     关键细节：素材判重后 id 会换，成片的 used[] 必须重映射，否则战绩链就断了。 */
+  function mergeBackup(cur, inc) {
+    const vault = (cur.vault || []).slice();
+    const byText = {};
+    vault.forEach(v => { byText[v.text] = v.id; });
+    const idMap = {};
+    let addedVault = 0;
+    (inc.vault || []).forEach(v => {
+      if (!v || !v.text) return;
+      if (byText[v.text] !== undefined) { idMap[v.id] = byText[v.text]; return; }
+      const id = v.id && !vault.some(x => x.id === v.id) ? v.id : ('v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+      vault.push({
+        id, text: String(v.text), code: v.code || '',
+        parts: Array.isArray(v.parts) ? v.parts : [],
+        createdAt: v.createdAt || Date.now(),
+        src: v.src || '导入', dupOf: v.dupOf || '', reparted: !!v.reparted
+      });
+      byText[v.text] = id;
+      idMap[v.id] = id;
+      addedVault++;
+    });
+
+    const takes = (cur.takes || []).slice();
+    const byTake = {};
+    takes.forEach(t => { byTake[t.title + '|' + t.chars] = 1; });
+    let addedTakes = 0;
+    (inc.takes || []).forEach(t => {
+      if (!t || !t.id) return;
+      const k = t.title + '|' + t.chars;
+      if (byTake[k]) return;
+      takes.push({
+        id: t.id, title: t.title, createdAt: t.createdAt || Date.now(),
+        score: t.score || 0, chars: t.chars || 0, body: t.body || '',
+        truncated: !!t.truncated, parts: t.parts || {}, risk: t.risk || 0,
+        used: (t.used || []).map(id => idMap[id] || id)
+      });
+      byTake[k] = 1;
+      addedTakes++;
+    });
+    takes.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    return { vault, takes, addedVault, addedTakes, skippedVault: (inc.vault || []).length - addedVault };
+  }
+
+  /* 配额兜底：丢最旧成片的正文（记录本身留着），从旧到新丢到放得下为止 */
+  function pruneForQuota(takes, limit) {
+    const size = arr => arr.reduce((a, t) => a + (t.body ? t.body.length : 0), 0);
+    const out = takes.slice();
+    const sorted = out.map((t, i) => ({ t, i })).sort((a, b) => (a.t.createdAt || 0) - (b.t.createdAt || 0));
+    let dropped = 0;
+    for (const item of sorted) {
+      if (size(out) <= limit) break;
+      if (out[item.i].body) { out[item.i] = Object.assign({}, out[item.i], { body: '', truncated: true }); dropped++; }
+    }
+    return { takes: out, dropped, stillOver: size(out) > limit };
+  }
+
+  function buildBackup(state) {
+    return {
+      app: 'koubo-transcript-cleaner', version: 2, exportedAt: Date.now(),
+      factors: state.factors, blacklist: state.blacklist, rules: state.rules,
+      blMode: state.blMode, libSort: state.libSort,
+      keep: state.keep, keepFor: state.keepFor,
+      vault: state.vault, takes: state.takes,
+      title: state.title, raw: state.raw, clean: state.clean, final: state.final, prompt: state.prompt
+    };
+  }
+
+  function buildPrompt(data) {
+    const f = data.factors || [];
+    const bl = data.blacklist || [];
+    const rules = data.rules || {};
+    const body = (data.cleaned || '').trim();
+
+    const ruleOn = [];
+    if (rules.filler) ruleOn.push('去掉语气词（嗯/啊/呃/那个/就是说…）');
+    if (rules.dedupe) ruleOn.push('合并重复表达与重复句');
+    if (rules.stutter) ruleOn.push('删除磕巴与重复字');
+    if (rules.opening) ruleOn.push('删除开头寒暄与自我介绍');
+
+    const hasCode = TIMECODE_RE.test(body);
+
+    const lines = [];
+    lines.push('# 角色');
+    lines.push('你是一名短视频口播剪辑策划，擅长从一段啰嗦的口语转写稿里，挑出能直接拿去剪的片段，并说明每一刀的理由。');
+    lines.push('');
+    lines.push('# 任务');
+    lines.push('下面这份文稿已经过本地预清洗（去语气词/去重复/删寒暄）。请你在其中挑出符合「三要素过滤标准」的片段，重组为一条可以直接开剪的 Markdown 脚本。');
+    lines.push('');
+    lines.push('# 三要素过滤标准（命中任一即保留，并标注命中了哪一条）');
+    for (const x of f) {
+      lines.push('## ' + x.name + '（' + x.desc + '）');
+      if (!x.items.length) { lines.push('- （本项未设置标准）'); continue; }
+      for (const it of x.items) lines.push('- ' + it);
+      lines.push('');
+    }
+    lines.push('# 必须删除的内容（黑名单）');
+    if (!bl.length) lines.push('- （未设置）');
+    for (const b of bl) lines.push('- ' + b);
+    lines.push('');
+    lines.push('# 清洗要求（本地已做，你复核即可）');
+    if (!ruleOn.length) lines.push('- （未开启任何本地规则）');
+    for (const r of ruleOn) lines.push('- ' + r);
+    lines.push('- 保留说话人的口语人味，只做删减和语序微调，不要改写成书面语，不要添加文稿里没有的事实、数字、案例');
+    lines.push('');
+
+    const risk = data.risk || [];
+    if (risk.length) {
+      lines.push('# 合规红线（发布前必须避开，改写时一律替换，不得保留原话）');
+      const byCat = {};
+      risk.forEach(h => { (byCat[h.cat] = byCat[h.cat] || []).push(h); });
+      for (const cat in byCat) {
+        const words = [...new Set(byCat[cat].map(h => '「' + h.word + '」'))].join('、');
+        lines.push('- ' + cat + '：' + words + ' —— ' + byCat[cat][0].why);
+        lines.push('  改法：' + byCat[cat][0].fix);
+      }
+      lines.push('- 如果某句话去掉这些词之后就没有信息量了，直接删掉这句，不要换个说法硬留');
+      lines.push('');
+    }
+
+    const gaps = data.gaps || [];
+    const ep = data.ep || null;
+    const gapItems = gapLines(gaps, ep);
+    if (gapItems.length) {
+      lines.push('# 这个故事目前缺的零件（只能用文稿里已有的内容补，缺就是缺，不许编）');
+      if (ep && ep.episodes > 1) {
+        lines.push('（本稿识别出 ' + ep.episodes + ' 段，缺口按段列出——一段缺的证据不能被另一段补上）');
+      }
+      for (const it of gapItems) {
+        lines.push('- ' + (it.seg ? it.seg + '：' : '') + it.g.what + '。' + it.g.why + ' ' + it.g.how);
+      }
+      lines.push('- 缺的零件如果在文稿里找不到，就在输出末尾单开一节「## 五、需要你自己补的」，写清楚要补什么，不要替用户虚构');
+      lines.push('');
+    }
+
+    lines.push('# 输出格式（只输出 Markdown，不要任何解释性开场白）');
+    lines.push('## 一、成片结构');
+    lines.push('用 3-6 行说明这条片子的叙事顺序（钩子 → 展开 → 落点）。');
+    lines.push('## 二、剪辑脚本');
+    lines.push('每段必须标出它承担的故事零件（冲突/我的动作/客户原话/结果/真实细节/价值观），零件缺失的地方要指出来。');
+    lines.push(hasCode
+      ? '用表格，列依次为：`序号 | 时间码 | 口播文本（可直接照读/照剪） | 命中要素 | 故事零件 | 剪辑建议`。时间码必须来自原文，不得编造。'
+      : '用表格，列依次为：`序号 | 段落 | 口播文本（可直接照读/照剪） | 命中要素 | 故事零件 | 剪辑建议`。原文无时间码，"段落"填第几段。');
+    lines.push('## 三、可删清单');
+    lines.push('列出你判断该删掉的原句，格式：`- 原句 → 原因（对应哪条黑名单）`。');
+    lines.push('## 四、3 个备选开头钩子');
+    lines.push('每条不超过 25 字，必须能在文稿里找到出处。故事型口播的钩子优先用「冲突现场」或「反常识结果」开场，不要用提问句。');
+    lines.push('');
+    lines.push('# 待处理文稿' + (data.title ? '（' + data.title + '）' : ''));
+    lines.push('"""');
+    lines.push(body || '（文稿为空）');
+    lines.push('"""');
+    return lines.join('\n');
+  }
+
+  /* ---------- 导出 Markdown ---------- */
+  function buildMarkdownFile(data) {
+    const now = new Date();
+    const title = (data.title || '').trim() || '口播整理稿';
+    const L = [];
+    L.push('# ' + title);
+    L.push('');
+    L.push('> 生成时间：' + fmt(now));
+    if (data.rawChars) L.push('> 原始稿 ' + data.rawChars + ' 字 → 预清洗后 ' + (data.cleanChars || data.rawChars) + ' 字（压缩 ' + (data.ratio || 0) + '%）');
+    if (data.finalChars) L.push('> 最终整理稿 ' + data.finalChars + ' 字');
+    L.push('');
+    const risk = data.risk || [];
+    if (risk.length) {
+      L.push('## 发布前必改（合规风险 ' + risk.length + ' 处）');
+      const seen = new Set();
+      for (const h of risk) {
+        const k = h.cat + '|' + h.word;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        L.push('- 「' + h.word + '」· ' + h.cat + '（' + (h.level === 'high' ? '高危' : '中危') + '）→ ' + h.fix);
+      }
+      L.push('');
+    }
+    const gaps2 = gapLines(data.gaps || [], data.ep || null);
+    if (gaps2.length) {
+      L.push('## 故事缺口（发布前最好补上）');
+      for (const it of gaps2) L.push('- ' + (it.seg ? it.seg + '：' : '') + it.g.what + ' → ' + it.g.how);
+      L.push('');
+    }
+    const f = data.factors || [];
+    if (f.length) {
+      L.push('## 三要素过滤标准');
+      for (const x of f) L.push('- **' + x.name + '**（' + x.desc + '）：' + (x.items.join('、') || '—'));
+      L.push('');
+    }
+    if (data.blacklist && data.blacklist.length) {
+      L.push('## 黑名单');
+      L.push('- ' + data.blacklist.join('\n- '));
+      L.push('');
+    }
+    L.push('---');
+    L.push('');
+    L.push((data.final || '（尚未粘贴最终稿）').trim());
+    L.push('');
+    return L.join('\n');
+  }
+
+  function fmt(d) {
+    const p = n => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+
+  function fileStamp(d) {
+    const p = n => String(n).padStart(2, '0');
+    return '' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes());
+  }
+
+  function safeFileName(s) {
+    return (String(s || '').trim().replace(/[\\/:*?"<>|\s]+/g, '_').replace(/^_+|_+$/g, '') || '口播整理稿').slice(0, 60);
+  }
+
+  /* ---------- 最终稿结构检查 ---------- */
+  function inspectMarkdown(md) {
+    const t = String(md || '');
+    const found = [];
+    if (/^#{1,6}\s+\S/m.test(t)) found.push('标题');
+    if (/^\s*\|.*\|\s*$/m.test(t)) found.push('表格');
+    if (/^\s*[-*]\s+\S/m.test(t)) found.push('列表');
+    if (/^\s*\d+[.、)]\s+\S/m.test(t)) found.push('编号');
+    if (/`[^`]+`|\*\*[^*]+\*\*/.test(t)) found.push('行内标记');
+    const lines = t ? t.split('\n').length : 0;
+    const code = (t.match(TIMECODE_RE) || []).length;
+    return { struct: found.length ? found.join(' / ') : '空', lines, timecodes: code };
+  }
+
+  return {
+    DEFAULT_FACTORS, DEFAULT_BLACKLIST, BLACKLIST_PATTERNS,
+    FILLER_CHARS, FILLER_PHRASES, FILLER_COND, REDUP_OK, STUTTER_PRONE, TIMECODE_RE,
+    countChars, normalize, splitSentences, timecodes,
+    stripOpeningPleasantries, applyBlacklist, stripFillers, stripStutter, mergeRepeats, tidy,
+    preclean, scoreSentences, buildPrompt, buildMarkdownFile, inspectMarkdown,
+    RISK_CATS, PART_DEFS, scanRisk, classifyParts, classifySentence, sentFingerprint,
+    bigrams, similarity, isDuplicate, contentOverlap, SIM_DUP, storyGaps,
+    makeTake, takeBody, matchVault, vaultStats, rankCandidates, librarySort, vaultInsights, takeGaps,
+    splitEpisodes, episodeGaps, parseSec, gapLines,
+    isBackup, mergeBackup, pruneForQuota, buildBackup,
+    fmt, fileStamp, safeFileName
+  };
+})();
+window.KBCore = KBCore;
+</script>
+
+<script id="ui">
+/* =========================================================================
+   UI —— 状态、渲染、事件
+   ========================================================================= */
+(function () {
+  const C = window.KBCore;
+  const KEY = 'koubo-cleaner-v2';
+  const $ = id => document.getElementById(id);
+
+  const DEFAULT_RULES = { filler: true, dedupe: true, stutter: true, opening: true };
+  const RULE_DEFS = [
+    { key: 'filler', label: '去语气词', hint: '（嗯/啊/那个/就是说）' },
+    { key: 'dedupe', label: '合并重复表达', hint: '' },
+    { key: 'stutter', label: '删除磕巴和重复字', hint: '' },
+    { key: 'opening', label: '识别并删除开头寒暄', hint: '' }
+  ];
+
+  const state = {
+    factors: JSON.parse(JSON.stringify(C.DEFAULT_FACTORS)),
+    blacklist: C.DEFAULT_BLACKLIST.slice(),
+    rules: Object.assign({}, DEFAULT_RULES),
+    blMode: 'delete',
+    title: '',
+    raw: '',
+    clean: '',
+    final: '',
+    prompt: '',
+    clicks: 0,
+    loaded: 0,
+    promptStale: false,
+    keep: [],
+    keepFor: '',
+    vault: [],
+    takes: [],
+    libSort: 'unused',
+    lastClean: null
+  };
+
+  const partName = k => (C.PART_DEFS.find(d => d.key === k) || { name: k }).name;
+  const openTakes = new Set();          // 哪些成片记录展开了正文（不持久化）
+
+  /* ---------- 持久化 ---------- */
+  let storageKB = 0;
+  function save() {
+    const payload = {
+      factors: state.factors, blacklist: state.blacklist, rules: state.rules,
+      blMode: state.blMode, title: state.title, raw: state.raw, clean: state.clean,
+      final: state.final, prompt: state.prompt, loaded: state.loaded,
+      keep: state.keep, keepFor: state.keepFor, vault: state.vault, takes: state.takes, libSort: state.libSort,
+      lastClean: state.lastClean ? { steps: state.lastClean.steps, events: state.lastClean.events } : null
+    };
+    let text = JSON.stringify(payload);
+    let pruned = 0;
+    try {
+      localStorage.setItem(KEY, text);
+    } catch (e) {
+      const quota = !!(e && (/Quota|NS_ERROR_DOM/.test(e.name || '') || e.code === 22 || e.code === 1014));
+      if (!quota) { $('saveState').textContent = '本地草稿：保存失败（' + (e && e.name) + '）'; return; }
+      /* 自动降级：先丢最旧成片的正文（记录和战绩都保留），别让用户的新改动整体丢掉 */
+      const p = C.pruneForQuota(state.takes, 600000);
+      pruned = p.dropped;
+      state.takes = p.takes;
+      payload.takes = state.takes;
+      text = JSON.stringify(payload);
+      try {
+        localStorage.setItem(KEY, text);
+        toast('存档过大，已自动丢弃 ' + pruned + ' 条最旧成片的正文（记录与评分都还在）；建议尽快「导出完整备份」', 'bad');
+      } catch (e2) {
+        $('saveState').innerHTML = '本地草稿：<b style="color:#b42318">浏览器存储已满，最新改动没保存</b>';
+        toast('存储已满，最新改动没保存！请先「导出完整备份」再删几条老成片', 'bad');
+        return;
+      }
+    }
+    storageKB = Math.round(text.length / 1024);
+    $('saveState').textContent = '本地草稿：已保存 ' + C.fmt(new Date()) + ' · ' + storageKB + ' KB' + (pruned ? '（已自动瘦身）' : '');
+  }
+
+  /* 自检的备份不能只靠「跑完就地写回」：应用自己有 500ms 的延时保存，
+     会在还原之后又把测试垃圾盖回去。所以备份另存一个键，下次启动时先还原再干活。 */
+  const BACKUP_KEY = KEY + '.selftest-backup';
+
+  function load() {
+    try {
+      const b = localStorage.getItem(BACKUP_KEY);
+      if (b !== null) {
+        localStorage.removeItem(BACKUP_KEY);
+        if (b === '__NONE__') localStorage.removeItem(KEY);
+        else localStorage.setItem(KEY, b);
+      }
+    } catch (e) { }
+    let d = null;
+    try { d = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { d = null; }
+    if (!d) return;
+    if (Array.isArray(d.factors) && d.factors.length === 3) state.factors = d.factors;
+    if (Array.isArray(d.blacklist)) state.blacklist = d.blacklist;
+    if (d.rules) state.rules = Object.assign({}, DEFAULT_RULES, d.rules);
+    if (d.blMode) state.blMode = d.blMode;
+    state.title = d.title || '';
+    state.raw = d.raw || '';
+    state.clean = d.clean || '';
+    state.final = d.final || '';
+    state.prompt = d.prompt || '';
+    state.loaded = d.loaded || 0;
+    state.keep = Array.isArray(d.keep) ? d.keep : [];
+    state.keepFor = d.keepFor || '';
+    state.vault = (Array.isArray(d.vault) ? d.vault : []).filter(v => v && v.text);
+    state.takes = (Array.isArray(d.takes) ? d.takes : []).filter(t => t && t.id);
+    state.libSort = d.libSort || 'unused';
+    state.lastClean = d.lastClean || null;
+  }
+
+  /* ---------- Toast ---------- */
+  let toastTimer = null;
+  function toast(msg, kind) {
+    const el = $('toast');
+    el.textContent = msg;
+    el.className = 'show' + (kind ? ' ' + kind : '');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { el.className = ''; }, 2200);
+  }
+
+  /* ---------- 渲染：三要素 ---------- */
+  function renderFactors() {
+    const host = $('factorList');
+    host.innerHTML = '';
+    syncCfgCount();
+    state.factors.forEach((f, fi) => {
+      const box = document.createElement('div');
+      box.className = 'sub';
+      box.innerHTML =
+        '<div class="sub-title">' + esc(f.name) + '<span class="hint">· ' + esc(f.desc) + '</span></div>' +
+        '<div class="chips"></div>' +
+        '<div class="row">' +
+          '<input type="text" placeholder="新增触发特征" autocomplete="off">' +
+          '<button class="btn btn-ghost">添加</button>' +
+        '</div>';
+      const chips = box.querySelector('.chips');
+      if (!f.items.length) {
+        const e = document.createElement('span');
+        e.className = 'chip empty';
+        e.textContent = '暂无，下面加一条';
+        chips.appendChild(e);
+      }
+      f.items.forEach((it, ii) => chips.appendChild(makeChip(it, () => {
+        state.factors[fi].items.splice(ii, 1); renderFactors(); save();
+      })));
+      const inp = box.querySelector('input');
+      inp.setAttribute('aria-label', '新增' + f.name + '触发特征');
+      // 注意：必须限定在 .row 里取按钮——子块内第一个 button 是 chip 的「×」
+      box.querySelector('.row button').addEventListener('click', () => addFactor(fi, inp));
+      inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addFactor(fi, inp); } });
+      host.appendChild(box);
+    });
+  }
+
+  function addFactor(fi, inp) {
+    click();
+    const v = inp.value.trim();
+    if (!v) { toast('先输入一条触发特征', 'bad'); inp.focus(); return; }
+    if (state.factors[fi].items.includes(v)) { toast('这条已经在了', 'bad'); return; }
+    state.factors[fi].items.push(v);
+    inp.value = '';
+    renderFactors();
+    // 重建 DOM 后把焦点还给同一个子块的新输入框，方便连着加
+    const again = document.querySelectorAll('#factorList .sub')[fi];
+    if (again) again.querySelector('.row input').focus();
+    save();
+    markPromptStale();
+    toast('已加入「' + state.factors[fi].name + '」标准', 'good');
+  }
+
+  function makeChip(text, onDel) {
+    const el = document.createElement('span');
+    el.className = 'chip';
+    const s = document.createElement('span');
+    s.className = 'txt';
+    s.textContent = text;
+    s.title = C.BLACKLIST_PATTERNS[text] ? '内置识别规则，命中整句处理' : '自定义：按字面匹配';
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = '×';
+    b.title = '删除';
+    b.setAttribute('aria-label', '删除：' + text);   // 只有「×」的话读屏念不出删的是哪条
+    b.addEventListener('click', () => { click(); onDel(); });
+    el.appendChild(s); el.appendChild(b);
+    return el;
+  }
+
+  /* ---------- 渲染：黑名单 ---------- */
+  function renderBlacklist() {
+    const host = $('blacklistChips');
+    host.innerHTML = '';
+    syncCfgCount();
+    if (!state.blacklist.length) {
+      const e = document.createElement('span');
+      e.className = 'chip empty';
+      e.textContent = '暂无黑名单';
+      host.appendChild(e);
+    }
+    state.blacklist.forEach((name, i) => host.appendChild(makeChip(name, () => {
+      state.blacklist.splice(i, 1); renderBlacklist(); save(); markPromptStale();
+    })));
+  }
+
+  /* ---------- 渲染：规则 ---------- */
+  function renderRules() {
+    const host = $('ruleList');
+    host.innerHTML = '';
+    RULE_DEFS.forEach(def => {
+      const lab = document.createElement('label');
+      lab.className = 'rule';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!state.rules[def.key];
+      cb.addEventListener('change', () => {
+        click();
+        state.rules[def.key] = cb.checked;
+        save();
+        if (state.clean) toast('规则已变，建议重新点「开始预清洗」');
+      });
+      const t = document.createElement('span');
+      t.innerHTML = '<b>' + esc(def.label) + '</b> <span class="hint">' + esc(def.hint) + '</span>';
+      lab.appendChild(cb); lab.appendChild(t);
+      host.appendChild(lab);
+    });
+    const radios = document.querySelectorAll('input[name=blMode]');
+    radios.forEach(r => {
+      r.checked = (r.value === state.blMode);
+      r.addEventListener('change', () => {
+        if (!r.checked) return;
+        click();
+        state.blMode = r.value;
+        save();
+        if (state.clean) toast('已切换黑名单处理方式，重新预清洗生效');
+      });
+    });
+  }
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  }
+
+  /* ---------- 计数 ---------- */
+  function click() {
+    state.clicks++;
+    $('clickCount').textContent = state.clicks;
+  }
+
+  function refreshRawMeta() {
+    const raw = $('rawText').value;
+    state.raw = raw;
+    const chars = C.countChars(raw);
+    $('rawChars').textContent = chars;
+    $('rawSents').textContent = C.splitSentences(C.normalize(raw)).length;
+    $('rawCodes').textContent = C.timecodes(raw).length;
+    state.loaded = chars;
+    $('loadedChars').textContent = chars;
+  }
+
+  function refreshFinalMeta() {
+    const v = $('finalText').value;
+    state.final = v;
+    $('finalChars').textContent = C.countChars(v);
+    const info = C.inspectMarkdown(v);
+    $('finalLines').textContent = info.lines;
+    $('finalStruct').textContent = info.struct;
+    const warn = $('finalWarn');
+    if (!v.trim()) { warn.style.display = 'none'; return; }
+    const miss = [];
+    if (!info.struct.includes('表格')) miss.push('没有表格（剪辑师主要看表格）');
+    if (!info.struct.includes('标题')) miss.push('没有标题层级');
+    if (state.clean && C.timecodes(state.clean) > 0 && info.timecodes === 0) miss.push('清洗稿里有时间码，但最终稿一个都没带上');
+    warn.style.display = '';
+    warn.className = 'note' + (miss.length ? ' warn' : '');
+    warn.textContent = miss.length ? '注意：' + miss.join('；') + '。可以让大模型按 Prompt 的「输出格式」重出一版。' : '✓ 结构完整，可以下载交给剪辑。';
+  }
+
+  function refreshPromptMeta() {
+    const v = $('promptText').value;
+    state.prompt = v;
+    $('promptChars').textContent = C.countChars(v);
+    autoGrow($('promptText'), 300, 1500);
+  }
+
+  /* Prompt 包要通读，按内容撑高，省掉滚动 */
+  function autoGrow(ta, min, max) {
+    if (!ta) return;
+    ta.style.height = 'auto';
+    const h = Math.max(min, Math.min(ta.scrollHeight + 4, max));
+    ta.style.height = h + 'px';
+  }
+
+  function markPromptStale() {
+    if (!state.prompt) return;
+    state.promptStale = true;
+    $('promptStamp').textContent = '标准已改动 · 复制时会自动重建';
+    $('promptStamp').className = 'k warn';
+  }
+
+  /* ---------- 预清洗 ---------- */
+  let pendingNotice = '';   // 清洗过程中产生的提醒，合并进完成提示——单独 toast 会被后面的 toast 顶掉，用户根本看不见
+  function runPreclean(extra) {
+    /* 放回豁免是按句子指纹存的，属于「这一篇稿子」。换稿时若不清，新稿里恰好有同样的
+       句子会被无声豁免——所以给豁免表绑一个稿件指纹，对不上就作废。 */
+    const fp = rawFingerprint($('rawText').value);
+    if (state.keep.length && state.keepFor && state.keepFor !== fp) {
+      state.keep = [];
+      state.keepFor = '';
+      pendingNotice = '换稿后旧的放回豁免已作废；';
+    }
+    if (!state.keep.length) state.keepFor = '';
+    return C.preclean($('rawText').value, Object.assign({
+      rules: state.rules,
+      blacklist: state.blacklist,
+      blacklistMode: state.blMode,
+      keep: state.keep
+    }, extra || {}));
+  }
+
+  function rawFingerprint(s) {
+    const t = String(s || '').replace(/\s+/g, '');
+    return t.length + '|' + t.slice(0, 40) + '|' + t.slice(-40);
+  }
+
+  function applyClean(res) {
+    state.clean = res.text;
+    state.lastClean = res;
+    $('cleanText').value = res.text;
+    $('cleanWrap').style.display = '';
+    $('cleanChars').textContent = res.after;
+    $('cleanRatio').textContent = res.ratio + '%';
+    $('cleanSents').textContent = res.sentences;
+    renderReport(res);
+    renderRisk(res.risk);
+    renderStory(res);
+    renderGems(res.text);
+    save();
+  }
+
+  function doPreclean() {
+    click();
+    const raw = $('rawText').value;
+    if (!raw.trim()) { toast('先把口播稿粘贴进来', 'bad'); $('rawText').focus(); return; }
+    const res = runPreclean();
+    applyClean(res);
+    buildPrompt(true);
+    toast(pendingNotice + '预清洗完成：' + res.before + ' 字 → ' + res.after + ' 字，Prompt 包已生成',
+      pendingNotice ? 'bad' : 'good');
+    pendingNotice = '';
+  }
+
+  /* 放回 / 收回：只改豁免表再整体重算，不直接编辑文本 —— 避免位置错乱 */
+  function restoreSentence(fp) {
+    if (!fp) return;
+    if (state.keep.indexOf(fp) === -1) state.keep.push(fp);
+    state.keepFor = rawFingerprint($('rawText').value);
+    applyClean(runPreclean());
+    markPromptStale();
+    toast('已放回该句，清洗稿已按豁免表重算', 'good');
+  }
+  function unrestoreSentence(fp) {
+    state.keep = state.keep.filter(x => x !== fp);
+    if (!state.keep.length) state.keepFor = '';
+    applyClean(runPreclean());
+    markPromptStale();
+    toast('该句已重新删除');
+  }
+
+  function renderReport(res) {
+    const host = $('reportBody');
+    host.innerHTML = '';
+    const events = res.events || [];
+    res.steps.forEach(st => {
+      const line = document.createElement('div');
+      line.className = 'rline';
+      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = st.label;
+      const ct = document.createElement('div'); ct.className = 'ct ' + (st.hits ? 'hit' : 'zero');
+      ct.textContent = st.off ? '关' : (st.hits + ' 处');
+      const ex = document.createElement('div'); ex.className = 'ex';
+      const mine = events.filter(e => e.bucket === st.key && e.kind === 'sentence');
+
+      if (mine.length) {
+        // 句子级删除：逐条给出「放回」
+        mine.slice(0, 6).forEach(e => {
+          const row = document.createElement('div');
+          row.style.cssText = 'margin-bottom:3px';
+          if (e.extra) row.appendChild(elFromHTML('<em>[' + esc(e.extra) + ']</em> '));
+          row.appendChild(elFromHTML('<s>' + esc(shorten(e.sample)) + '</s> '));
+          const b = document.createElement('button');
+          b.className = 'mini';
+          b.textContent = '放回';
+          b.dataset.act = 'restore';
+          b.dataset.fp = e.fp || '';
+          b.title = '把这句放回清洗稿（会按豁免表重算全文）';
+          row.appendChild(b);
+          ex.appendChild(row);
+        });
+        if (mine.length > 6) ex.insertAdjacentHTML('beforeend', '<div>…另有 ' + (mine.length - 6) + ' 条同类删除</div>');
+      } else if (st.key === 'blacklist' && st.byName && Object.keys(st.byName).length) {
+        ex.textContent = Object.entries(st.byName).map(([k, v]) => k + '×' + v).join(' ｜ ');
+      } else {
+        const wordLevel = events.filter(e => e.bucket === st.key).slice(0, 3);
+        ex.innerHTML = wordLevel.length
+          ? wordLevel.map(e => '<s>' + esc(shorten(e.sample)) + '</s>').join('　') + '<div class="tip">词级删除，如需保留请关掉该规则重洗</div>'
+          : (st.off ? '未开启' : '没有命中');
+      }
+      line.appendChild(nm); line.appendChild(ct); line.appendChild(ex);
+      host.appendChild(line);
+    });
+
+    const net = document.createElement('div');
+    net.className = 'rline';
+    net.innerHTML = '<div class="nm">净减少</div><div class="ct hit">' + res.saved + ' 字</div>' +
+      '<div class="ex">原文 ' + res.before + ' 字 → 清洗后 ' + res.after + ' 字（压缩 ' + res.ratio + '%），时间码保留 ' + res.timecodes + ' 个</div>';
+    host.appendChild(net);
+
+    // 已放回的句子里，哪些其实没在原文中出现（说明豁免指纹失效）→ 提示
+    if (state.keep.length) {
+      $('keptInfo').innerHTML = '已放回 <span class="keptback">' + state.keep.length + '</span> 句，' +
+        '<button class="mini" data-act="keep-list">查看</button>';
+    } else {
+      $('keptInfo').textContent = '';
+    }
+  }
+
+  function renderKeptList() {
+    const host = $('reportBody');
+    const box = document.createElement('div');
+    box.className = 'rline';
+    box.innerHTML = '<div class="nm keptback">已放回</div><div class="ct">' + state.keep.length + ' 句</div>';
+    const ex = document.createElement('div');
+    ex.className = 'ex';
+    state.keep.forEach(fp => {
+      const row = document.createElement('div');
+      row.style.cssText = 'margin-bottom:3px';
+      row.appendChild(elFromHTML('<em>' + esc(shorten(fp, 30)) + '</em> '));
+      const b = document.createElement('button');
+      b.className = 'mini warn';
+      b.textContent = '收回';
+      b.dataset.act = 'unrestore';
+      b.dataset.fp = fp;
+      b.title = '取消豁免，让它重新被删除';
+      row.appendChild(b);
+      ex.appendChild(row);
+    });
+    box.appendChild(ex);
+    host.appendChild(box);
+  }
+
+  function elFromHTML(html) {
+    const d = document.createElement('span');
+    d.innerHTML = html;
+    return d;
+  }
+
+  /* ---------- 素材库 ---------- */
+  function newId() {
+    return 'v' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  }
+
+  function addToVault(text, code, src) {
+    const clean = String(text || '').replace(/\s+/g, ' ').trim();
+    if (clean.length < 6) { toast('素材太短，至少记一句完整的话', 'bad'); return null; }
+    if (state.vault.some(v => v.text === clean)) { toast('库里已经有一模一样的一条了', 'bad'); return null; }
+    const parts = C.classifySentence(clean);
+    const dup = state.vault.find(v => C.isDuplicate(v.text, clean));
+    const item = {
+      id: newId(), text: clean, code: code || '', parts,
+      createdAt: Date.now(), src: src || '手记', dupOf: dup ? dup.id : ''
+    };
+    state.vault.unshift(item);
+    renderVault(); save();
+    if (dup) toast('已入库 —— 但库里有一条近似的（用过 ' + (dup.used || 0) + ' 次），注意别连着用同一个案例', 'bad');
+    else toast('已入库：' + (parts.length ? parts.map(partName).join('/') : '未归类'), 'good');
+    return item;
+  }
+
+  function insertFinal(text, code, vid) {
+    const cur = $('finalText').value.trim();
+    $('finalText').value = (cur ? cur + '\n\n' : '') + '- ' + text + (code ? '　`[' + code + ']`' : '');
+    refreshFinalMeta();
+    save();
+    toast(vid ? '已插入最终稿 —— 下载或复制时会自动计入这篇的素材清单' : '已插入最终整理稿', 'good');
+  }
+
+  function miniBtn(label, act, cls) {
+    const b = document.createElement('button');
+    b.className = 'mini' + (cls ? ' ' + cls : '');
+    b.textContent = label;
+    b.dataset.act = act;
+    return b;
+  }
+
+  function vaultItem(v, stats) {
+    const s = (stats || {})[v.id] || {};
+    const el = document.createElement('div');
+    el.className = 'vitem' + (s.count ? '' : ' unused') + (v.dupOf ? ' duped' : '');
+    const tx = document.createElement('div');
+    tx.className = 'vtx';
+    const main = document.createElement('span');
+    main.className = 'vmain';
+    main.textContent = v.text;
+    tx.appendChild(main);
+    const meta = document.createElement('div');
+    meta.className = 'vmeta';
+    const bits = [];
+    if (v.code) bits.push('[' + v.code + ']');
+    bits.push('入库 ' + C.fmt(new Date(v.createdAt)));
+    if (v.src) bits.push('来源·' + v.src);
+    if (v.dupOf) bits.push('与库内一条近似');
+    meta.appendChild(elFromHTML('<span class="vtag">' + esc(v.parts.length ? v.parts.map(partName).join('·') : '未归类') + '</span>'));
+    bits.forEach(b => meta.appendChild(elFromHTML('<span>' + esc(b) + '</span>')));
+    if (s.count) {
+      meta.appendChild(elFromHTML('<span class="badge hot">用于 ' + s.count + ' 条成片' +
+        (s.avg ? ' · 均分 ' + s.avg.toFixed(1) : ' · 表现未回填') + '</span>'));
+    } else {
+      meta.appendChild(elFromHTML('<span class="badge">一次没用过</span>'));
+    }
+    tx.appendChild(meta);
+
+    const ops = document.createElement('div');
+    ops.className = 'vops';
+    /* 归类是正则猜的，必须给人一个改的出口：换主桶（其余标签保留在后） */
+    const sel = document.createElement('select');
+    sel.className = 'psel';
+    sel.dataset.act = 'vault-part';
+    sel.dataset.id = v.id;
+    sel.setAttribute('aria-label', '改这条素材的故事零件归类');
+    [{ k: '', n: '未归类' }].concat(C.PART_DEFS.map(d => ({ k: d.key, n: d.name }))).forEach(o => {
+      const op = document.createElement('option');
+      op.value = o.k;
+      op.textContent = o.n;
+      if ((v.parts[0] || '') === o.k) op.selected = true;
+      sel.appendChild(op);
+    });
+    ops.appendChild(sel);
+    const ins = miniBtn('插入最终稿', 'vault-insert');
+    ins.dataset.id = v.id;
+    ops.appendChild(ins);
+    const del = miniBtn('删除', 'vault-del', 'warn');
+    del.dataset.id = v.id;
+    ops.appendChild(del);
+
+    el.appendChild(tx); el.appendChild(ops);
+    return el;
+  }
+
+  function renderVault() {
+    const host = $('vaultBody');
+    if (!host) return;
+    host.innerHTML = '';
+    const stats = C.vaultInsights(state.vault, state.takes).stats;
+    const st = id => stats[id] || {};
+    $('vaultTotal').textContent = state.vault.length;
+    $('vaultUnused').textContent = state.vault.filter(v => !st(v.id).count).length;
+    $('vaultUsed').textContent = state.vault.filter(v => st(v.id).count).length;
+    const best = state.vault.map(v => ({ v, a: st(v.id).avg || 0 })).filter(x => x.a > 0).sort((a, b) => b.a - a.a)[0];
+    $('vaultPerf').innerHTML = best ? '最灵的：「' + esc(shorten(best.v.text, 14)) + '」均分 ' + best.a.toFixed(1) : '';
+
+    if (!state.vault.length) {
+      host.innerHTML = '<p class="vempty">还没有素材。清洗后在「素材体检」里点「入库」，或手记一条客户原话、带数字的结果、真实细节。' +
+        '库攒够之后，缺口检测就能直接从你自己的存货里递零件给你，选题也不用从零开始想。</p>';
+      return;
+    }
+    const kw = ($('vaultSearch').value || '').trim();
+    const matched = kw ? state.vault.filter(v => v.text.includes(kw)) : state.vault;
+    const items = C.librarySort(matched, stats, state.libSort);
+    if (!items.length) {
+      host.innerHTML = '<p class="vempty">没有匹配「' + esc(kw) + '」的素材。</p>';
+      return;
+    }
+    const buckets = {};
+    items.forEach(v => {
+      const k = v.parts.length ? v.parts[0] : 'other';   // 一条只挂主桶，避免同条重复出现
+      (buckets[k] = buckets[k] || []).push(v);
+    });
+    const order = C.PART_DEFS.map(d => d.key).concat(['other']);
+    order.forEach(k => {
+      const list = buckets[k];
+      if (!list || !list.length) return;
+      const d = C.PART_DEFS.find(x => x.key === k);
+      const grp = document.createElement('div');
+      grp.className = 'vgroup';
+      const h = document.createElement('h3');
+      h.innerHTML = esc(d ? d.name : '未归类') + ' <span class="cnt">' + list.length + ' 条' +
+        (d ? ' · ' + esc(d.role) : '') + '</span>';
+      grp.appendChild(h);
+      list.forEach(v => grp.appendChild(vaultItem(v, stats)));
+      host.appendChild(grp);
+    });
+  }
+
+  function exportVault() {
+    if (!state.vault.length) { toast('库存是空的', 'bad'); return; }
+    const stats = C.vaultStats(state.vault, state.takes);
+    const st = id => stats[id] || {};
+    const rated = state.takes.filter(t => t.score > 0);
+    const L = ['# 素材库存', '', '> 导出时间：' + C.fmt(new Date()) + ' · 共 ' + state.vault.length + ' 条 · 已回填表现的成片 ' + rated.length + ' 条', ''];
+    C.PART_DEFS.forEach(d => {
+      const list = state.vault.filter(v => v.parts[0] === d.key);
+      if (!list.length) return;
+      const withScore = list.filter(v => st(v.id).avg > 0);
+      const avg = withScore.length ? (withScore.reduce((a, v) => a + st(v.id).avg, 0) / withScore.length).toFixed(1) : '—';
+      L.push('## ' + d.name + '（' + d.role + '）· ' + list.length + ' 条 · 该类均分 ' + avg);
+      list.forEach(v => {
+        const s = st(v.id);
+        L.push('- ' + v.text + (v.code ? ' `[' + v.code + ']`' : '') +
+          '  （入库 ' + C.fmt(new Date(v.createdAt)) + '｜' +
+          (s.count ? '用于 ' + s.count + ' 条成片' + (s.avg ? '，均分 ' + s.avg.toFixed(1) : '，表现未回填') : '一次没用过') + '）');
+      });
+      L.push('');
+    });
+    const rest = state.vault.filter(v => !v.parts.length);
+    if (rest.length) {
+      L.push('## 未归类 · ' + rest.length + ' 条');
+      rest.forEach(v => L.push('- ' + v.text));
+      L.push('');
+    }
+    const unused = state.vault.filter(v => !st(v.id).count).length;
+    if (unused) L.push('> 其中 ' + unused + ' 条一次都没用过，下次录稿优先考虑。');
+    if (rated.length) {
+      const best = state.vault.map(v => ({ v, a: st(v.id).avg || 0 })).filter(x => x.a > 0).sort((a, b) => b.a - a.a)[0];
+      if (best) L.push('> 目前最灵的一块零件：「' + best.v.text + '」（均分 ' + best.a.toFixed(1) + '）');
+    }
+    download('素材库存_' + C.fileStamp(new Date()) + '.md', L.join('\n'), 'text/markdown');
+  }
+
+  /* ---------- 成片记录：登记动作是免费的，唯一的手动动作是发布后点一下分数 ---------- */
+  function registerTake(finalText) {
+    const txt = String(finalText || '').trim();
+    if (!txt) return null;
+    const title = ($('titleInput').value || '').trim() || '未命名成片';
+    const used = C.matchVault(txt, state.vault);
+    const src = state.clean || txt;
+    const parts = C.classifyParts(src).counts;
+    const risk = C.scanRisk(src).length;
+    const chars = C.countChars(txt);
+    const dup = state.takes.find(t => t.title === title && t.chars === chars);
+    if (dup) {
+      dup.used = used; dup.parts = parts; dup.risk = risk;
+      dup.body = txt.slice(0, 12000); dup.truncated = txt.length > 12000;
+      save(); renderTakes(); renderVault();
+      toast('已更新《' + title + '》的记录（用到 ' + used.length + ' 条库存素材）');
+      return dup;
+    }
+    const take = C.makeTake({ title, final: txt, parts, risk, used });
+    state.takes.unshift(take);
+    /* 不再维护 v.used 计数器：使用次数一律由成片记录反查得出（vaultStats），
+       两处记账必然漂移，所以只留一个真相源。 */
+    save(); renderTakes(); renderVault();
+    toast('已登记成片《' + title + '》· 用到 ' + used.length + ' 条库存素材；发布后回来点个分数，库存就知道哪块零件真的灵', 'good');
+    return take;
+  }
+
+  function takeItem(t, stats) {
+    const el = document.createElement('div');
+    el.className = 'titem' + (t.score ? ' rated' : '');
+    const main = document.createElement('div');
+    main.className = 'tmain';
+    const title = document.createElement('div');
+    title.className = 'tt';
+    title.textContent = t.title;
+    main.appendChild(title);
+
+    const meta = document.createElement('div');
+    meta.className = 'tmeta';
+    const gaps = C.takeGaps(t.parts);
+    const bits = [C.fmt(new Date(t.createdAt)), t.chars + ' 字', '用到库存 ' + (t.used || []).length + ' 条'];
+    if (t.risk) bits.push('发布前必改 ' + t.risk + ' 处');
+    if (gaps.length) bits.push('缺：' + gaps.map(g => {
+      const d = C.PART_DEFS.find(x => x.key === g);
+      return d ? d.name : g;
+    }).join('、'));
+    bits.forEach(b => meta.appendChild(elFromHTML('<span>' + esc(b) + '</span>')));
+    main.appendChild(meta);
+
+    const stars = document.createElement('div');
+    stars.className = 'stars';
+    stars.setAttribute('role', 'group');
+    stars.setAttribute('aria-label', '给《' + t.title + '》回填表现');
+    for (let i = 1; i <= 5; i++) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'star' + (t.score >= i ? ' on' : '');
+      b.textContent = i;
+      b.dataset.act = 'take-score';
+      b.dataset.id = t.id;
+      b.dataset.v = i;
+      b.title = i === 1 ? '扑了' : i === 5 ? '爆了' : '第 ' + i + ' 档';
+      b.setAttribute('aria-label', i + ' 分' + (t.score === i ? '（当前）' : ''));
+      b.setAttribute('aria-pressed', t.score === i ? 'true' : 'false');
+      stars.appendChild(b);
+    }
+    if (!t.score) stars.appendChild(elFromHTML('<span class="tpending">待回填</span>'));
+
+    const ops = document.createElement('div');
+    ops.className = 'tops';
+    const hasBody = !!C.takeBody(t);
+    const open = miniBtn(openTakes.has(t.id) ? '收起正文' : '看正文', 'take-open');
+    open.dataset.id = t.id;
+    ops.appendChild(open);
+    if (hasBody) {
+      const ld = miniBtn('载入这篇', 'take-load');
+      ld.dataset.id = t.id;
+      ld.title = '把这篇的正文放回「最终整理稿」，标题也一起带回——改口径或重剪老片子时用';
+      ops.appendChild(ld);
+    }
+    const rm = miniBtn('重新匹配', 'take-rematch');
+    rm.dataset.id = t.id;
+    rm.title = '用更宽的相似度再认一次这篇用了哪些库存素材（大模型把原话改成间接引语时漏认的能捞回来）';
+    ops.appendChild(rm);
+    const del = miniBtn('删除', 'take-del', 'warn');
+    del.dataset.id = t.id;
+    del.setAttribute('aria-label', '删除成片记录《' + t.title + '》');
+    ops.appendChild(del);
+
+    el.appendChild(main); el.appendChild(stars); el.appendChild(ops);
+
+    if (openTakes.has(t.id)) {
+      const panel = document.createElement('div');
+      panel.className = 'tbody';
+      if (hasBody) {
+        const pre = document.createElement('pre');
+        pre.textContent = C.takeBody(t);
+        panel.appendChild(pre);
+        if (t.truncated) panel.appendChild(elFromHTML('<div class="tip">正文超过 12000 字，档案里只留了前段；完整稿在你当时下载的 .md 文件里。</div>'));
+      } else {
+        panel.appendChild(elFromHTML('<div class="tip">这条记录是在"存档正文"功能之前登记的，没有正文可看。以后下载或复制终稿时会自动存正文。</div>'));
+      }
+      if ((t.used || []).length) {
+        const list = document.createElement('div');
+        list.className = 'tused';
+        list.appendChild(elFromHTML('<div class="tip">这篇用到的库存素材：</div>'));
+        t.used.forEach(id => {
+          const v = state.vault.find(x => x.id === id);
+          if (v) list.appendChild(elFromHTML('<div class="tuse">· ' + esc(shorten(v.text, 44)) + '</div>'));
+        });
+        panel.appendChild(list);
+      }
+      el.appendChild(panel);
+    }
+    return el;
+  }
+
+  function renderTakes() {
+    const host = $('takesBody');
+    if (!host) return;
+    host.innerHTML = '';
+    const ins = C.vaultInsights(state.vault, state.takes);
+    $('takesStat').innerHTML = '共 <b>' + state.takes.length + '</b> 条 · 已回填表现 <b>' + ins.rated + '</b> 条' +
+      (ins.rated ? ' · 均分 <b>' + ins.avg + '</b>' : '');
+    if (!state.takes.length) {
+      host.innerHTML = '<p class="vempty">还没有成片记录。点「下载 .md」或「复制 Markdown」时会自动记一条在这里，不用你动手。' +
+        '片子发出去跑得好不好，回来点一下 1–5 分就行——素材库从此知道哪块零件真的灵，补件推荐也会优先递表现好的那条。</p>';
+      return;
+    }
+    state.takes.forEach(t => host.appendChild(takeItem(t, ins.stats)));
+  }
+
+  function exportTakes() {
+    if (!state.takes.length) { toast('还没有成片记录', 'bad'); return; }
+    const ins = C.vaultInsights(state.vault, state.takes);
+    const L = ['# 成片记录', '', '> 导出时间：' + C.fmt(new Date()) + ' · 共 ' + state.takes.length + ' 条 · 已回填 ' + ins.rated + ' 条 · 均分 ' + ins.avg, ''];
+    state.takes.forEach(t => {
+      L.push('## ' + t.title);
+      L.push('- ' + C.fmt(new Date(t.createdAt)) + ' · ' + t.chars + ' 字 · 表现：' + (t.score ? t.score + '/5' : '未回填'));
+      if (t.risk) L.push('- 发布前必改 ' + t.risk + ' 处');
+      const gaps = C.takeGaps(t.parts);
+      if (gaps.length) L.push('- 缺零件：' + gaps.map(g => (C.PART_DEFS.find(x => x.key === g) || { name: g }).name).join('、'));
+      if ((t.used || []).length) {
+        L.push('- 用到的库存素材：');
+        t.used.forEach(id => {
+          const v = state.vault.find(x => x.id === id);
+          if (v) L.push('  - ' + v.text);
+        });
+      }
+      L.push('');
+    });
+    download('成片记录_' + C.fileStamp(new Date()) + '.md', L.join('\n'), 'text/markdown');
+  }
+
+  /* ---------- 合规风险面板 ---------- */
+  function renderRisk(list) {
+    list = list || [];
+    const host = $('riskList');
+    host.innerHTML = '';
+    const badge = $('riskCount');
+    badge.textContent = list.length + ' 处';
+    badge.setAttribute('aria-label', '合规风险命中 ' + list.length + ' 处');
+    badge.className = 'badge ' + (list.some(h => h.level === 'high') ? 'warn' : (list.length ? '' : 'hot'));
+    if (!list.length) {
+      host.innerHTML = '<p class="note" style="color:#15803d">✓ 未命中极限词库。但词库盖不住所有情形：涉及功效、价格对比、客户评价的说法，发布前仍要自己过一遍。</p>';
+      return;
+    }
+    list.forEach(h => {
+      const el = document.createElement('div');
+      el.className = 'risk-item' + (h.level === 'high' ? ' high' : '');
+      el.innerHTML =
+        '<span class="rw">「' + esc(h.word) + '」</span>' +
+        '<span class="rcat">' + esc(h.cat) + (h.level === 'high' ? ' · 高危' : ' · 中危') + '</span>' +
+        '<div class="rs">' + (h.code ? '[' + esc(h.code) + '] ' : '') + esc(shorten(h.sentence, 46)) + '</div>' +
+        '<div class="rf">改法：' + esc(h.fix) + '</div>';
+      host.appendChild(el);
+    });
+  }
+
+  /* ---------- 故事结构面板 ---------- */
+  function renderStory(res) {
+    const grid = $('partsGrid');
+    grid.innerHTML = '';
+    C.PART_DEFS.forEach(d => {
+      const n = res.parts.counts[d.key] || 0;
+      const el = document.createElement('div');
+      el.className = 'part' + (n ? '' : ' zero');
+      el.innerHTML = '<div class="pn">' + esc(d.name) + '</div><div class="pr">' + esc(d.role) + '</div><div class="pc">' + n + '</div>';
+      el.title = d.role + '：命中 ' + n + ' 句';
+      grid.appendChild(el);
+    });
+
+    const host = $('gapList');
+    host.innerHTML = '';
+    const ep = res.ep || { episodes: 1, blocks: [] };
+
+    if (ep.episodes > 1) {
+      host.appendChild(elFromHTML('<div class="tip">检测到 <b>' + ep.episodes +
+        '</b> 个故事段（按空行或时间码跳 >60 秒切分）。整篇合起来看零件是齐的，但<b>缺口要按段看</b>——一段故事缺结果，不能被另一段的结果补上：</div>'));
+      ep.blocks.forEach(b => {
+        if (!b.gaps.length) {
+          host.appendChild(elFromHTML('<div class="gap ok"><span class="gw">第 ' + b.no + ' 段「' + esc(b.excerpt) + '」零件齐</span></div>'));
+          return;
+        }
+        b.gaps.forEach(g => host.appendChild(gapCard(g, '第 ' + b.no + ' 段「' + b.excerpt + '」', res.text)));
+      });
+      return;
+    }
+
+    if (!res.gaps.length) {
+      host.appendChild(elFromHTML('<div class="gap ok"><span class="gw">✓ 零件齐</span>' +
+        '<div class="gwhy">冲突、我的动作、客户原话、带数字的结果、真实细节、价值观都在。这种稿子直接开剪就行。</div></div>'));
+      return;
+    }
+    res.gaps.forEach(g => host.appendChild(gapCard(g, '', res.text)));
+  }
+
+  /* 一个缺口卡片：说清缺什么、为什么致命、怎么补、库存里有什么能顶 */
+  function gapCard(g, prefix, text) {
+    const el = document.createElement('div');
+    el.className = 'gap' + (g.severity === 'high' ? ' high' : '');
+    const nm = g.missing === 'structure' ? '故事结构' : partName(g.missing);
+    el.innerHTML = '<div class="gw">缺「' + esc(nm) + '」' +
+      (prefix ? '<span class="gseg"> · ' + esc(prefix) + '</span>' : '') + '</div>' +
+      '<div class="gwhy">' + esc(g.what) + ' —— ' + esc(g.why) + '</div>' +
+      '<div class="ghow">' + esc(g.how) + '</div>';
+    if (g.missing === 'structure') return el;
+    const cands = suggestFromVault(g.missing, text);
+    if (cands.length) {
+      const box = document.createElement('div');
+      box.className = 'fixes';
+      box.insertAdjacentHTML('beforeend', '<div class="gwhy">库存里有没用过的同类零件，可以直接补：</div>');
+      cands.forEach(c => {
+        const row = document.createElement('div');
+        row.className = 'fixrow';
+        row.appendChild(elFromHTML('<span class="ftx">' + esc(shorten(c.text, 42)) + '</span>'));
+        const b = document.createElement('button');
+        b.className = 'mini';
+        b.textContent = '插入最终稿';
+        b.dataset.act = 'vault-insert';
+        b.dataset.id = c.id;
+        row.appendChild(b);
+        box.appendChild(row);
+      });
+      el.appendChild(box);
+    } else if (state.vault.some(v => v.parts.indexOf(g.missing) !== -1)) {
+      el.insertAdjacentHTML('beforeend', '<div class="gwhy">库里有同类零件，但都用过了 —— 用过的不是不能用，只是别再让观众看到同一个案例。</div>');
+    } else {
+      el.insertAdjacentHTML('beforeend', '<div class="gwhy">库里没有这类存货。这种零件只能下次录的时候专门攒，工具编不出来。</div>');
+    }
+    return el;
+  }
+
+  /* 库存变了 → 缺口面板里的补件推荐要跟着变 */
+  function renderStoryFromClean() {
+    if (!state.clean) return;
+    const parts = C.classifyParts(state.clean);
+    renderStory({
+      parts: parts, gaps: C.storyGaps(parts), text: state.clean,
+      ep: C.episodeGaps(state.clean)
+    });
+  }
+
+  /* 从库存里挑该零件类型、且与当前清洗稿不重复的候选 */
+  function suggestFromVault(bucket, cleanText, n) {
+    const pool = state.vault.filter(v =>
+      v.parts.indexOf(bucket) !== -1 &&
+      !C.isDuplicate(v.text, cleanText) &&
+      !cleanText.includes(v.text.slice(0, 12))
+    );
+    /* 排序交给核心层：没用过的优先，同使用次数下历史表现好的优先 */
+    return C.rankCandidates(pool, C.vaultStats(state.vault, state.takes), n || 2);
+  }
+
+  function shorten(s, n) {
+    s = String(s || '').replace(/\s+/g, ' ');
+    const max = n || 26;
+    return s.length > max ? s.slice(0, max) + '…' : s;
+  }
+
+  function renderGems(text) {
+    const host = $('gemList');
+    host.innerHTML = '';
+    const top = C.scoreSentences(text).slice(0, 5);
+    if (!top.length) {
+      const p = document.createElement('p');
+      p.className = 'note';
+      p.textContent = '没找到 8~120 字的候选句。文稿太短或全是碎句时会出现这种情况。';
+      host.appendChild(p);
+      return;
+    }
+    top.forEach(g => {
+      const parts = C.classifySentence(g.text);
+      const el = document.createElement('div');
+      el.className = 'gem';
+      const t = document.createElement('div');
+      t.className = 'gt';
+      t.textContent = (g.code ? '[' + g.code + '] ' : '') + g.text;
+      const s = document.createElement('div');
+      s.className = 'gs';
+      s.innerHTML = '<span class="score">' + g.score + ' 分</span>' +
+        '<span>' + esc(g.tags.join(' · ') || '平铺直叙') + '</span>' +
+        '<span>' + esc(parts.map(partName).join('/') || '未归类') + '</span>' +
+        '<span>' + g.len + ' 字</span>';
+      const pick = document.createElement('button');
+      pick.className = 'mini';
+      pick.textContent = '插入最终稿';
+      pick.dataset.act = 'insert-final';
+      pick.dataset.text = g.text;
+      pick.dataset.code = g.code || '';
+      pick.title = '把这句话追加到右侧「最终整理稿」';
+      const inn = document.createElement('button');
+      inn.className = 'mini';
+      inn.textContent = '入库';
+      inn.dataset.act = 'vault-in';
+      inn.dataset.text = g.text;
+      inn.dataset.code = g.code || '';
+      inn.title = '存进素材库，下次录稿时会被查重和补件推荐用到';
+      s.appendChild(pick);
+      s.appendChild(inn);
+      el.appendChild(t); el.appendChild(s);
+      host.appendChild(el);
+    });
+  }
+
+  /* ---------- Prompt ---------- */
+  function buildPrompt(auto) {
+    if (!auto) click();
+    if (!state.clean.trim()) {
+      toast('先在左侧完成预清洗', 'bad');
+      return;
+    }
+    const txt = C.buildPrompt({
+      factors: state.factors,
+      blacklist: state.blacklist,
+      rules: state.rules,
+      cleaned: state.clean,
+      title: $('titleInput').value.trim(),
+      risk: C.scanRisk(state.clean),
+      gaps: C.storyGaps(C.classifyParts(state.clean)),
+      ep: C.episodeGaps(state.clean)
+    });
+    $('promptText').value = txt;
+    refreshPromptMeta();
+    state.promptStale = false;
+    $('promptStamp').textContent = '生成于 ' + C.fmt(new Date());
+    $('promptStamp').className = '';
+    save();
+    if (!auto) toast('Prompt 包已更新', 'good');
+  }
+
+  /* ---------- 复制 / 下载 ---------- */
+  async function copyText(text, what, srcEl) {
+    if (!text.trim()) { toast(what + '是空的', 'bad'); return; }
+    /* 自检运行时不碰系统剪贴板 —— 否则跑一次测试就把你刚复制的东西顶掉了 */
+    if (isQuiet()) {
+      window.__kouboCopies.push({ what: what, chars: C.countChars(text) });
+      return;
+    }
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      }
+    } catch (e) { ok = false; }
+    if (!ok) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed'; ta.style.left = '-9999px';
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+    }
+    if (ok) {
+      toast(what + '已复制（' + C.countChars(text) + ' 字）', 'good');
+    } else if (srcEl) {
+      // 浏览器拦了剪贴板：直接帮用户选中，按下 Ctrl+C 就行
+      srcEl.focus();
+      srcEl.select();
+      toast('剪贴板被浏览器拦了 —— 内容已帮你选中，直接按 Ctrl+C', 'bad');
+    } else {
+      toast('复制失败，请手动全选复制', 'bad');
+    }
+  }
+
+  /* 自检运行期间必须「安静」：不弹原生「另存为」模态框（会堵住页面、还会在下载文件夹里
+     堆一堆测试垃圾），不写系统剪贴板（否则跑一次测试就把你刚复制的东西顶掉）。
+     闸门不能只看 URL —— kouboSelftest() 是可以在不带 #selftest=1 的情况下被手动调用的。 */
+  const QUIET = window.__kouboQuiet = window.__kouboQuiet || { on: false };
+  QUIET.byUrl = /[?&#]selftest=1/.test(location.search + location.hash);
+  const isQuiet = () => QUIET.on || QUIET.byUrl;
+  window.kbIsQuiet = isQuiet;
+  const downloadLog = [];
+  window.__kouboDownloads = downloadLog;
+  if (!window.__kouboCopies) window.__kouboCopies = [];
+
+  function download(name, text, mime) {
+    if (!text.trim()) { toast('内容为空，无法下载', 'bad'); return; }
+    if (isQuiet()) {
+      downloadLog.push({ name: name, chars: C.countChars(text) });
+      return;
+    }
+    const blob = new Blob(['\ufeff' + text], { type: (mime || 'text/plain') + ';charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 400);
+    toast('已下载 ' + name, 'good');
+  }
+
+  function downloadMd() {
+    click();
+    const final = $('finalText').value;
+    if (!final.trim()) { toast('先把大模型返回的稿子粘贴到「最终整理稿」', 'bad'); $('finalText').focus(); return; }
+    const md = C.buildMarkdownFile({
+      title: $('titleInput').value.trim(),
+      factors: state.factors,
+      blacklist: state.blacklist,
+      rawChars: +$('rawChars').textContent || 0,
+      cleanChars: +$('cleanChars').textContent || 0,
+      ratio: parseInt($('cleanRatio').textContent, 10) || 0,
+      finalChars: C.countChars(final),
+      final,
+      risk: C.scanRisk(state.clean),
+      gaps: C.storyGaps(C.classifyParts(state.clean)),
+      ep: C.episodeGaps(state.clean)
+    });
+    const nm = C.safeFileName($('titleInput').value.trim() || '口播整理稿') + '_' + C.fileStamp(new Date()) + '.md';
+    download(nm, md, 'text/markdown');
+    registerTake(final);
+  }
+
+  /* ---------- 示例稿 ---------- */
+  const SAMPLE = [
+    '大家好，我是小王，做装修这行已经八年了，今天给大家分享一个很多业主都会踩的坑。',
+    '嗯，那个，其实吧，很多客户第一次来找我的时候，都是先问价格。',
+    '上个月有个客户，他对比了四家公司，最后选了一家报价最便宜的，便宜了整整两万块。',
+    '结果呢，结果就是开工到一半，工长说这个要加钱那个要加钱，最后总共多花了三万五。',
+    '我我我当时接到他电话的时候，他声音都是抖的，他说小王我是不是被人坑了。',
+    '所谓增项，说白了就是指合同里没有写，但是施工过程中必须增加的费用。',
+    '根据行业数据显示，超过六成的装修纠纷都是来自主材和人工的增项。',
+    '所以说，报价低不是便宜，报价准才是便宜。',
+    '报价低不是便宜，报价准才是便宜。',
+    '我一直跟我自己的客户讲，你可以拿着我的报价单去比，比完你再回来找我。',
+    '那个，反正就是，你至少要问清楚三件事：水电按米还是按项，瓷砖要不要找平，拆除含不含清运。',
+    '这三件事问明白了，你就不会多花冤枉钱，不会多花冤枉钱。',
+    '行，那今天就聊到这里，记得点赞关注，我们下期见。'
+  ].join('\n');
+
+  /* ---------- 事件绑定 ---------- */
+  /* 标准改过后，取 Prompt 前先按最新标准重建，避免把旧版复制/下载出去 */
+  function ensureFreshPrompt() {
+    if (state.promptStale && state.clean.trim()) {
+      buildPrompt(true);
+      toast('标准已改动，Prompt 包已按最新标准重建', 'good');
+    }
+    return $('promptText').value;
+  }
+
+  /* ---------- 过滤标准抽屉 ---------- */
+  let cfgReturn = null;
+  function syncCfgCount() {
+    const el = $('cfgCount');
+    if (!el) return;
+    /* 三要素的词条挂在 items 上，不是 words——写错属性名不会报错，
+       `f.words || []` 会静默给出 0，徽标就只剩黑名单数量。 */
+    const n = state.factors.reduce((a, f) => a + ((f.items || []).length), 0) + state.blacklist.length;
+    el.textContent = String(n);
+    el.setAttribute('aria-label', '过滤条目共 ' + n + ' 条');
+  }
+  function openConfig(src) {
+    if ($('cfgDrawer').getAttribute('data-open') === 'true') return;
+    /* 回还目标要用真正的触发元素。
+       只记 document.activeElement 不行：程序化 click 与"刚被别的逻辑点过"都会让它指向
+       不相干的元素，于是焦点还到别处——真人键盘操作恰好看不出来，那是侥幸不是正确。 */
+    cfgReturn = src || (document.activeElement !== document.body ? document.activeElement : $('cfgOpen'));
+    $('cfgDrawer').setAttribute('data-open', 'true');
+    $('cfgScrim').setAttribute('data-open', 'true');
+    $('cfgOpen').setAttribute('aria-expanded', 'true');
+    const first = $('cfgDrawer').querySelector('.cfg-body input, .cfg-body button');
+    if (first) first.focus();
+  }
+  function closeConfig() {
+    $('cfgDrawer').setAttribute('data-open', 'false');
+    $('cfgScrim').setAttribute('data-open', 'false');
+    $('cfgOpen').setAttribute('aria-expanded', 'false');
+    /* 焦点要送回打开它的按钮，否则键盘用户关完抽屉会掉回页首 */
+    if (cfgReturn && cfgReturn.focus) cfgReturn.focus();
+  }
+
+  const ACTS = {
+    'toggle-config': btn => { click(); ($('cfgDrawer').getAttribute('data-open') === 'true' ? closeConfig : openConfig)(btn); },
+    'close-config': () => { click(); closeConfig(); },
+    'preclean': doPreclean,
+    'build-prompt': () => buildPrompt(false),
+    'copy-prompt': () => { click(); copyText(ensureFreshPrompt(), 'Prompt 包', $('promptText')); },
+    'download-prompt': () => {
+      click();
+      const t = ensureFreshPrompt();
+      if (!t.trim()) { toast('还没有 Prompt 包', 'bad'); return; }
+      download(C.safeFileName($('titleInput').value.trim() || '口播') + '_Prompt_' + C.fileStamp(new Date()) + '.txt', t);
+    },
+    'copy-md': () => {
+      click();
+      const f = $('finalText').value;
+      if (f.trim()) registerTake(f);
+      copyText(f, 'Markdown', $('finalText'));
+    },
+    'download-md': downloadMd,
+    'copy-clean': () => { click(); copyText($('cleanText').value, '清洗稿', $('cleanText')); },
+    'sample': () => {
+      click();
+      $('rawText').value = SAMPLE;
+      $('titleInput').value = $('titleInput').value.trim() || '装修报价里的增项坑';
+      refreshRawMeta(); save();
+      toast('示例稿已载入，直接点「开始预清洗」看效果', 'good');
+    },
+    'clear-raw': () => {
+      click();
+      $('rawText').value = ''; state.raw = ''; state.clean = ''; state.lastClean = null;
+      state.keep = [];                       // 放回豁免属于这一篇稿子，清稿就清掉
+      $('cleanText').value = ''; $('cleanWrap').style.display = 'none';
+      ['reportBody', 'gemList', 'riskList', 'gapList', 'partsGrid', 'keptInfo'].forEach(id => { $(id).innerHTML = ''; });
+      refreshRawMeta(); save();
+      toast('文稿已清空（标准设置与素材库保留）');
+    },
+    'add-blacklist': () => {
+      click();
+      const inp = $('blacklistInput');
+      const v = inp.value.trim();
+      if (!v) { toast('先输入要删除的类型', 'bad'); inp.focus(); return; }
+      if (state.blacklist.includes(v)) { toast('这条已经在黑名单里了', 'bad'); return; }
+      state.blacklist.push(v);
+      inp.value = '';
+      renderBlacklist(); save(); markPromptStale();
+      toast('已加入黑名单：' + v + (C.BLACKLIST_PATTERNS[v] ? '（内置识别规则）' : '（按字面匹配）'), 'good');
+    },
+    'reset-rules': () => {
+      click();
+      if (!confirm('把三要素标准、黑名单、规则恢复成出厂默认？文稿内容不会被动。')) return;
+      state.factors = JSON.parse(JSON.stringify(C.DEFAULT_FACTORS));
+      state.blacklist = C.DEFAULT_BLACKLIST.slice();
+      state.rules = Object.assign({}, DEFAULT_RULES);
+      state.blMode = 'delete';
+      renderFactors(); renderBlacklist(); renderRules(); save(); markPromptStale();
+      toast('已恢复默认标准', 'good');
+    },
+    'export-json': () => {
+      click();
+      download('口播整理工具_配置_' + C.fileStamp(new Date()) + '.json',
+        JSON.stringify({ factors: state.factors, blacklist: state.blacklist, rules: state.rules, blMode: state.blMode }, null, 2),
+        'application/json');
+    },
+    /* ---- 逐条放回 ---- */
+    'restore': btn => restoreSentence(btn && btn.dataset.fp),
+    'unrestore': btn => unrestoreSentence(btn && btn.dataset.fp),
+    'keep-list': () => { click(); renderKeptList(); },
+    /* ---- 素材体检 ---- */
+    'insert-final': btn => { click(); if (btn) insertFinal(btn.dataset.text, btn.dataset.code); },
+    'vault-in': btn => { click(); if (btn) addToVault(btn.dataset.text, btn.dataset.code, '清洗稿'); },
+    /* ---- 素材库 ---- */
+    'vault-add': () => {
+      click();
+      const v = $('vaultInput');
+      if (addToVault(v.value, '', '手记')) { v.value = ''; v.focus(); }
+    },
+    'vault-insert': btn => {
+      click();
+      const v = state.vault.find(x => x.id === (btn && btn.dataset.id));
+      if (v) insertFinal(v.text, v.code, v.id);
+      else toast('找不到这条素材了，可能刚被删掉', 'bad');
+    },
+    'vault-part': sel => {
+      click();
+      const v = state.vault.find(x => x.id === (sel && sel.dataset.id));
+      if (!v) return;
+      const k = sel.value;
+      v.parts = k ? [k].concat((v.parts || []).filter(p => p !== k)) : [];
+      v.reparted = true;
+      renderVault(); renderStoryFromClean(); save();
+      toast('已改到「' + (k ? partName(k) : '未归类') + '」' + (k ? '，补件推荐和分组都按新桶走' : ''));
+    },
+    'vault-del': btn => {
+      click();
+      const i = state.vault.findIndex(x => x.id === (btn && btn.dataset.id));
+      if (i < 0) return;
+      state.vault.splice(i, 1);
+      renderVault(); renderStoryFromClean(); save();
+      toast('已删除该条素材');
+    },
+    'vault-clear': () => {
+      click();
+      if (!state.vault.length) { toast('库存已经是空的'); return; }
+      if (!confirm('清空素材库（' + state.vault.length + ' 条）？这是你攒下来的东西，删掉找不回来。')) return;
+      state.vault = [];
+      renderVault(); renderStoryFromClean(); save();
+      toast('素材库已清空');
+    },
+    'vault-export': () => { click(); exportVault(); },
+    /* ---- 成片记录 ---- */
+    'take-score': btn => {
+      click();
+      const t = state.takes.find(x => x.id === (btn && btn.dataset.id));
+      if (!t) return;
+      const v = +btn.dataset.v;
+      t.score = (t.score === v) ? 0 : v;          // 再点同档＝撤销
+      save(); renderTakes(); renderVault();
+      toast(t.score ? '已记：《' + t.title + '》表现 ' + t.score + '/5，库存里用到的零件都算上这一分' : '已撤销该条评分');
+    },
+    'take-open': btn => {
+      click();
+      const id = btn && btn.dataset.id;
+      if (openTakes.has(id)) openTakes.delete(id); else openTakes.add(id);
+      renderTakes();
+    },
+    'take-load': btn => {
+      click();
+      const t = state.takes.find(x => x.id === (btn && btn.dataset.id));
+      if (!t) return;
+      const body = C.takeBody(t);
+      if (!body) { toast('这条记录没有存正文', 'bad'); return; }
+      const cur = $('finalText').value.trim();
+      if (cur && !confirm('「最终整理稿」里已有内容，载入《' + t.title + '》会覆盖它。继续？')) return;
+      $('finalText').value = body;
+      refreshFinalMeta();
+      if (!($('titleInput').value || '').trim()) {
+        $('titleInput').value = t.title;
+        state.title = t.title;
+      }
+      save();
+      toast('已载入《' + t.title + '》的正文，可直接改口径或重新下载', 'good');
+    },
+    'take-rematch': btn => {
+      click();
+      const t = state.takes.find(x => x.id === (btn && btn.dataset.id));
+      if (!t) return;
+      const src = C.takeBody(t) || $('finalText').value;
+      if (!src.trim()) { toast('这条记录没存正文，认不了；新登记的片子会自动存正文', 'bad'); return; }
+      const found = C.matchVault(src, state.vault, 0.55);
+      const before = (t.used || []).length;
+      t.used = [...new Set((t.used || []).concat(found))];
+      save(); renderTakes(); renderVault();
+      toast(t.used.length > before
+        ? '用更宽的口径又认出 ' + (t.used.length - before) + ' 条，这篇共用到库存 ' + t.used.length + ' 条'
+        : '没有新认出的素材，这篇就是用到库存 ' + t.used.length + ' 条');
+    },
+    'take-del': btn => {
+      click();
+      const i = state.takes.findIndex(x => x.id === (btn && btn.dataset.id));
+      if (i < 0) return;
+      const title = state.takes[i].title;
+      state.takes.splice(i, 1);
+      save(); renderTakes(); renderVault();
+      toast('已删除《' + title + '》的记录（再点一次「下载 .md」可重新登记）');
+    },
+    'take-now': () => {
+      click();
+      const f = $('finalText').value;
+      if (!f.trim()) { toast('「最终整理稿」还是空的，先粘进大模型返回的稿子', 'bad'); $('finalText').focus(); return; }
+      registerTake(f);
+    },
+    'takes-export': () => { click(); exportTakes(); },
+    'export-backup': () => {
+      click();
+      const json = JSON.stringify(C.buildBackup(state), null, 2);
+      download('口播工具备份_' + C.fileStamp(new Date()) + '.json', json, 'application/json');
+      toast('完整备份已导出（标准 + 素材 ' + state.vault.length + ' 条 + 成片 ' + state.takes.length + ' 条）', 'good');
+    },
+    'import-backup': () => { click(); $('importFile').click(); },
+    'wipe': () => {
+      click();
+      if (!confirm('清空全部数据（含文稿、设置和素材库）？此操作不可撤销。')) return;
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      location.reload();
+    }
+  };
+
+  function dispatch(act, btn) {
+    const fn = ACTS[act];
+    if (fn) fn(btn || null);
+    else toast('按钮未绑定功能：' + act, 'bad');
+  }
+
+  /* 动态渲染出来的按钮走事件委托，避免 querySelector 绑错元素 */
+  const DELEGATED = ['reportBody', 'keptInfo', 'gemList', 'riskList', 'gapList', 'vaultBody', 'takesBody'];
+
+  /* 导入：合并而不是覆盖，避免一份旧备份冲掉本机新攒的战绩 */
+  function applyImport(o) {
+    if (!C.isBackup(o)) return { ok: false, msg: '看起来不是本工具的备份文件（缺 vault / takes / factors 三项）' };
+    const m = C.mergeBackup(state, o);
+    state.vault = m.vault;
+    state.takes = m.takes;
+    const untouched = JSON.stringify(state.factors) === JSON.stringify(C.DEFAULT_FACTORS) &&
+      JSON.stringify(state.blacklist) === JSON.stringify(C.DEFAULT_BLACKLIST);
+    let stdMsg = '标准配置保留你当前的';
+    if (untouched && Array.isArray(o.factors)) {
+      state.factors = o.factors;
+      if (Array.isArray(o.blacklist)) state.blacklist = o.blacklist;
+      if (o.rules) state.rules = Object.assign({}, DEFAULT_RULES, o.rules);
+      if (o.blMode) state.blMode = o.blMode;
+      if (o.libSort) state.libSort = o.libSort;
+      renderFactors(); renderBlacklist(); renderRules();
+      markPromptStale();          // 标准换了，已有的 Prompt 包就是旧版
+      stdMsg = '标准配置已套用备份里的（你原本没改过）';
+    }
+    renderVault(); renderTakes(); save();
+    return {
+      ok: true, addedVault: m.addedVault, addedTakes: m.addedTakes,
+      skipped: m.skippedVault, stdMsg,
+      msg: '导入完成：新增素材 ' + m.addedVault + ' 条、成片 ' + m.addedTakes + ' 条（重复 ' + m.skippedVault + ' 条已跳过）；' + stdMsg
+    };
+  }
+
+  /* 暴露一个同步入口：文件选择器那条路要 FileReader（异步），
+     自检和控制台都需要能直接喂 JSON 进来验证整条 UI 链路。 */
+  window.kouboImport = applyImport;
+
+  function bind() {
+    document.querySelectorAll('[data-act]').forEach(btn => {
+      btn.addEventListener('click', () => dispatch(btn.dataset.act, btn));
+    });
+    DELEGATED.forEach(id => {
+      const host = $(id);
+      if (!host) return;
+      host.addEventListener('click', e => {
+        const btn = e.target.closest ? e.target.closest('[data-act]') : null;
+        if (!btn || !host.contains(btn)) return;
+        e.preventDefault();
+        dispatch(btn.dataset.act, btn);
+      });
+      /* select 的交互是 change 不是 click（改桶下拉），同样走委托 */
+      host.addEventListener('change', e => {
+        const el = e.target.closest ? e.target.closest('[data-act]') : null;
+        if (!el || !host.contains(el)) return;
+        dispatch(el.dataset.act, el);
+      });
+    });
+    $('blacklistInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); ACTS['add-blacklist'](); }
+    });
+    $('vaultInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); ACTS['vault-add'](); }
+    });
+    $('vaultSearch').addEventListener('input', renderVault);
+    $('importFile').addEventListener('change', e => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      const fr = new FileReader();
+      fr.onload = () => {
+        let o = null;
+        try { o = JSON.parse(String(fr.result)); } catch (err) { toast('这个文件不是合法 JSON，导入已取消', 'bad'); e.target.value = ''; return; }
+        const r = applyImport(o);
+        toast(r.msg, r.ok ? 'good' : 'bad');
+        e.target.value = '';
+      };
+      fr.onerror = () => { toast('文件读取失败', 'bad'); e.target.value = ''; };
+      fr.readAsText(f, 'utf-8');
+    });
+    /* 桌面端快捷键：核心动作一天按几百次，不该只有一条鼠标路径 */
+    document.addEventListener('keydown', e => {
+      /* Esc 先处理：它不带修饰键，会被下面的 ctrl/meta 闸门挡掉 */
+      if (e.key === 'Escape' && $('cfgDrawer').getAttribute('data-open') === 'true') {
+        e.preventDefault(); closeConfig(); return;
+      }
+      if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+      const k = (e.key || '').toLowerCase();
+      if (k === 'enter') { e.preventDefault(); dispatch('preclean', null); }
+      else if (k === 's') { e.preventDefault(); dispatch('download-md', null); }
+      else if (e.shiftKey && k === 'p') { e.preventDefault(); dispatch('copy-prompt', null); }
+      else if (e.shiftKey && k === 'm') { e.preventDefault(); dispatch('copy-md', null); }
+    });
+    $('cfgScrim').addEventListener('click', closeConfig);
+    const SORT_LABEL = { unused: '没用过优先', perf: '表现优先', busy: '最常用' };
+    document.querySelectorAll('input[name=libSort]').forEach(r => {
+      r.checked = (r.value === state.libSort);
+      r.addEventListener('change', () => {
+        if (!r.checked) return;
+        click();
+        state.libSort = r.value;
+        renderVault(); save();
+        toast('库存排序已切到「' + SORT_LABEL[r.value] + '」');
+      });
+    });
+    $('rawText').addEventListener('input', () => { refreshRawMeta(); debounceSave(); });
+    $('finalText').addEventListener('input', () => { refreshFinalMeta(); debounceSave(); });
+    $('titleInput').addEventListener('input', () => { state.title = $('titleInput').value; debounceSave(); });
+    $('promptText').addEventListener('input', refreshPromptMeta);
+    // 粘贴大文本时自动刷新
+    ['rawText', 'finalText'].forEach(id => $(id).addEventListener('paste', () => setTimeout(() => {
+      if (id === 'rawText') refreshRawMeta(); else refreshFinalMeta();
+    }, 0)));
+  }
+
+  let saveTimer = null;
+  function debounceSave() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(save, 500);
+  }
+
+  /* ---------- 启动 ---------- */
+  function init() {
+    load();
+    renderFactors();
+    renderBlacklist();
+    renderRules();
+    bind();
+    $('titleInput').value = state.title;
+    $('rawText').value = state.raw;
+    $('finalText').value = state.final;
+    $('promptText').value = state.prompt;
+    $('clickCount').textContent = state.clicks;
+    refreshRawMeta();
+    refreshFinalMeta();
+    refreshPromptMeta();
+    if (state.clean) {
+      $('cleanWrap').style.display = '';
+      $('cleanText').value = state.clean;
+      const base = (state.lastClean && state.lastClean.steps) ? state.lastClean : {};
+      const res = Object.assign({}, base, {
+        text: state.clean,
+        after: C.countChars(state.clean),
+        before: +$('rawChars').textContent || 0,
+        parts: C.classifyParts(state.clean),
+        risk: C.scanRisk(state.clean)
+      });
+      res.steps = res.steps || [];
+      res.events = res.events || [];
+      res.gaps = C.storyGaps(res.parts);
+      res.saved = Math.max(0, res.before - res.after);
+      res.ratio = res.before ? Math.round(res.saved / res.before * 100) : 0;
+      res.sentences = C.splitSentences(res.text).length;
+      res.timecodes = C.timecodes(res.text).length;
+      $('cleanChars').textContent = res.after;
+      $('cleanRatio').textContent = res.ratio + '%';
+      $('cleanSents').textContent = res.sentences;
+      renderReport(res);
+      renderRisk(res.risk);
+      renderStory(res);
+      renderGems(res.text);
+    }
+    renderVault();
+    renderTakes();
+    $('jsState').textContent = '✓ 已加载，工具就绪';
+    if (state.raw || state.final || state.prompt) {
+      $('saveState').textContent = '本地草稿：已从浏览器存档恢复';
+    }
+    // #demo=1 或 ?demo=1 —— 自检/演示：自动载入示例稿并完成一次预清洗
+    if (/[?&#]demo=1/.test(location.search + location.hash)) {
+      $('rawText').value = SAMPLE;
+      if (!$('titleInput').value) $('titleInput').value = '装修报价里的增项坑';
+      refreshRawMeta();
+      doPreclean();
+    }
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+
+<script id="selftest">
+/* =========================================================================
+   SELFTEST —— 打开 koubo-transcript-cleaner.html?selftest=1 即自动跑一遍页内
+   端到端自检：纯 DOM 驱动（与用户真实点击等价），结果打印在页面顶部。
+   ========================================================================= */
+(function () {
+  /* 同时支持 ?selftest=1 和 #selftest=1：有些浏览器/快捷方式打开本地文件时会丢掉 query。
+     注意这里不 return —— 无论是否自动跑，都要把 kouboSelftest 暴露出去好手动触发。 */
+  const AUTORUN = /[?&#]selftest=1/.test(location.search + location.hash);
+  const q = id => document.getElementById(id);
+  const out = [];
+  const clk = a => { const b = document.querySelector('[data-act="' + a + '"]'); if (!b) { out.push('FAIL 按钮不存在: ' + a); return null; } b.click(); return b; };
+  const ok = (name, cond, info) => out.push((cond ? 'PASS  ' : 'FAIL  ') + name + (info ? ' → ' + info : ''));
+  const nOf = sel => document.querySelectorAll(sel).length;
+  window.confirm = () => true;
+  window.alert = () => { };
+
+  function run() {
+  /* 开「安静档」：这一趟里下载和复制只登记不落地。必须就地清空数组而不是换新数组，
+     否则 UI 那边 download()/copyText() 持有的还是旧引用，计数会永远是 0。 */
+  window.__kouboQuiet = window.__kouboQuiet || { on: false };
+  window.__kouboQuiet.on = true;
+  if (window.__kouboDownloads) window.__kouboDownloads.length = 0;
+  if (window.__kouboCopies) window.__kouboCopies.length = 0;
+  /* 自检开头会清空文稿/素材库/成片记录，而这些都会写回 localStorage —— 先把用户的真实存档
+     整份备份下来，跑完原样还原。否则「跑一次测试」等于「删掉用户攒的东西」。 */
+  const SAVED = localStorage.getItem('koubo-cleaner-v2');
+  /* 备份写进独立的键，由下次启动时的 load() 兜底还原（就地还原会被应用的延时保存盖掉）。
+     已经有备份就不覆盖，避免第二次跑测试把第一次的真实备份换成测试垃圾。 */
+  try {
+    const BK = 'koubo-cleaner-v2.selftest-backup';
+    if (localStorage.getItem(BK) === null) localStorage.setItem(BK, SAVED === null ? '__NONE__' : SAVED);
+  } catch (e) { }
+  try {
+    /* 归零，保证自检可反复跑 */
+    clk('clear-raw');
+    if (+q('vaultTotal').textContent) clk('vault-clear');
+    let guard = 0;
+    while (guard++ < 200) {
+      const del = document.querySelector('#takesBody [data-act="take-del"]');
+      if (!del) break;
+      del.click();
+    }
+    ok('归零完成（文稿/库存/成片记录）', +q('vaultTotal').textContent === 0 && nOf('#takesBody .titem') === 0 && q('rawChars').textContent === '0',
+      'vault=' + q('vaultTotal').textContent + ' takes=' + nOf('#takesBody .titem'));
+
+    ok('启动完成', q('jsState').textContent.indexOf('就绪') !== -1, JSON.stringify(q('jsState').textContent));
+    ok('六类故事零件已注册', KBCore.PART_DEFS.length === 6, 'PART_DEFS=' + KBCore.PART_DEFS.length);
+    ok('极限词类目已注册', KBCore.RISK_CATS.length >= 6, 'RISK_CATS=' + KBCore.RISK_CATS.length);
+
+    /* ---- 清洗 + 新面板 ---- */
+    clk('sample'); clk('preclean');
+    ok('预清洗产出清洗稿', q('cleanText').value.length > 50, q('cleanText').value.length + ' 字');
+    ok('零件网格已渲染 6 格', nOf('#partsGrid .part') === 6);
+    ok('合规风险面板命中极限词', nOf('#riskList .risk-item') > 0 && q('riskCount').textContent !== '0 处',
+      q('riskCount').textContent + ' / ' + ((q('riskList').querySelector('.rw') || {}).textContent || ''));
+    ok('风险项带改口建议', /改法：/.test(q('riskList').textContent));
+    ok('故事面板已渲染', q('gapList').textContent.length > 4, q('gapList').textContent.replace(/\s+/g, ' ').slice(0, 46));
+    ok('素材体检带入库按钮', nOf('#gemList [data-act="vault-in"]') > 0, nOf('#gemList [data-act="vault-in"]') + ' 个');
+    ok('含极限词的稿子 Prompt 自动带上红线段', /# 合规红线/.test(q('promptText').value), q('riskCount').textContent);
+
+    /* ---- 逐条放回 ---- */
+    const restoreBtn = document.querySelector('#reportBody [data-act="restore"]');
+    if (restoreBtn) {
+      const before = q('cleanText').value.length;
+      restoreBtn.click();
+      ok('放回该句后清洗稿变长', q('cleanText').value.length > before, before + ' → ' + q('cleanText').value.length);
+      ok('已放回计数出现', /已放回/.test(q('keptInfo').textContent), q('keptInfo').textContent.replace(/\s+/g, ' '));
+      const kl = q('keptInfo').querySelector('[data-act="keep-list"]');
+      ok('查看按钮存在', !!kl);
+      if (kl) {
+        kl.click();
+        const un = document.querySelector('#reportBody [data-act="unrestore"]');
+        ok('查看已放回 → 有收回按钮', !!un);
+        if (un) {
+          un.click();
+          ok('收回后清洗稿变回原样', q('cleanText').value.length === before, before + ' vs ' + q('cleanText').value.length);
+        }
+      }
+    } else {
+      ok('存在可放回的删除条目', false, '报告里没有句子级删除');
+    }
+
+    /* ---- 素材库 ---- */
+    const v0 = +q('vaultTotal').textContent;
+    document.querySelector('#gemList [data-act="vault-in"]').click();
+    ok('入库一条', +q('vaultTotal').textContent === v0 + 1, v0 + ' → ' + q('vaultTotal').textContent);
+    ok('库存按零件分组', nOf('#vaultBody .vgroup') >= 1, nOf('#vaultBody .vgroup') + ' 组');
+    ok('新入库的标为没用过', nOf('#vaultBody .vitem.unused') >= 1);
+    const txt = document.querySelector('#vaultBody .vitem .vmain').textContent;
+    q('vaultInput').value = txt;
+    clk('vault-add');
+    ok('完全相同的素材被拒', /一模一样/.test(q('toast').textContent), q('toast').textContent);
+    const vBefore = +q('vaultTotal').textContent;
+    q('vaultInput').value = '他说小王我是不是被人坑了，声音都是抖的';
+    clk('vault-add');
+    const added = [].slice.call(document.querySelectorAll('#vaultBody .vitem'))
+      .filter(e => /是不是被人坑了/.test(e.querySelector('.vmain').textContent)).pop();
+    ok('手记素材入库并自动归类到「客户原话」',
+      +q('vaultTotal').textContent === vBefore + 1 && !!added && /客户原话/.test(added.querySelector('.vtag').textContent),
+      added ? added.querySelector('.vtag').textContent : '未找到该条');
+    ok('与库内已有内容近似的素材会给出提醒', /近似的/.test(q('toast').textContent), q('toast').textContent);
+    q('vaultInput').value = '短';
+    clk('vault-add');
+    ok('太短的素材被拒', /太短/.test(q('toast').textContent), q('toast').textContent);
+
+    /* ---- 效果回流：登记要免费，评分要 5 秒 ---- */
+    const usedText = document.querySelector('#vaultBody .vitem .vmain').textContent;
+    q('finalText').value = '# 成片结构\n钩子→展开\n\n- ' + usedText + '\n\n| 序号 | 时间码 | 文本 | 命中 | 零件 | 建议 |\n|---|---|---|---|---|---|\n| 1 | 00:21 | x | 人设 | 冲突 | 特写 |';
+    q('finalText').dispatchEvent(new Event('input'));
+    clk('copy-md');
+    ok('下载/复制终稿时自动登记成片', nOf('#takesBody .titem') === 1, nOf('#takesBody .titem') + ' 条');
+    ok('登记时反查出用到的库存素材', /用到库存 1 条/.test(q('takesBody').textContent), (q('takesBody').querySelector('.tmeta') || {}).textContent);
+    ok('素材库同步显示「用于 N 条成片」', /用于 1 条成片/.test(q('vaultBody').textContent), 'vaultUsed=' + q('vaultUsed').textContent);
+    ok('未评分时标为待回填', /待回填/.test(q('takesBody').textContent) && /表现未回填/.test(q('vaultBody').textContent), '');
+    const s5 = document.querySelector('#takesBody [data-act="take-score"][data-v="5"]');
+    ok('评分按钮是 5 个原生 button', nOf('#takesBody .star') === 5 && !!s5);
+    s5.click();
+    ok('点一下即回填，库存拿到均分', /均分 5\.0/.test(q('vaultBody').textContent) && /已回填表现 <b>1<\/b>/.test(q('takesStat').innerHTML), q('takesStat').textContent);
+    document.querySelector('#takesBody [data-act="take-score"][data-v="5"]').click();
+    ok('再点同档＝撤销评分', /已回填表现 <b>0<\/b>/.test(q('takesStat').innerHTML), q('takesStat').textContent);
+    document.querySelector('#takesBody [data-act="take-score"][data-v="4"]').click();
+    clk('copy-md');
+    ok('重复下载同一片不堆重复记录', nOf('#takesBody .titem') === 1 && /均分 4\.0/.test(q('vaultBody').textContent), nOf('#takesBody .titem') + ' 条');
+    let threw2 = '';
+    try { clk('takes-export'); } catch (e) { threw2 = e.message; }
+    ok('导出成片记录不抛错', !threw2, threw2);
+    q('vaultSearch').value = ''; q('vaultSearch').dispatchEvent(new Event('input'));
+    const perfRadio = document.querySelector('input[name=libSort][value=perf]');
+    perfRadio.checked = true; perfRadio.dispatchEvent(new Event('change'));
+    ok('切到「表现优先」排序不报错', /表现优先/.test(q('toast').textContent) && nOf('#vaultBody .vitem') > 0, q('toast').textContent);
+    document.querySelector('input[name=libSort][value=unused]').checked = true;
+    document.querySelector('input[name=libSort][value=unused]').dispatchEvent(new Event('change'));
+    q('finalText').value = ''; q('finalText').dispatchEvent(new Event('input'));
+    clk('take-now');
+    ok('最终稿为空时拒绝手动登记', /还是空的/.test(q('toast').textContent), q('toast').textContent);
+    document.querySelector('#takesBody [data-act="take-del"]').click();
+    ok('删记录后库存表现归零', nOf('#takesBody .titem') === 0 && /表现未回填|一次没用过/.test(q('vaultBody').textContent), q('takesStat').textContent);
+    q('finalText').value = '# 成片结构\n\n- ' + usedText + '\n';
+    q('finalText').dispatchEvent(new Event('input'));
+    clk('copy-md');
+    ok('删除后可重新登记', nOf('#takesBody .titem') === 1, '');
+    /* ---- 档案化：正文要存下来、要能拿回去 ---- */
+    ok('每条记录四个操作都挂上了（看正文/载入/重匹配/删除）',
+      nOf('#takesBody .titem') > 0 && [...document.querySelectorAll('#takesBody .titem')].every(e =>
+        ['take-open', 'take-load', 'take-rematch', 'take-del'].every(a => e.querySelector('[data-act="' + a + '"]'))),
+      [...document.querySelectorAll('#takesBody .titem')].map(e => e.querySelectorAll('.tops [data-act]').length).join('/'));
+    const openBtn = document.querySelector('#takesBody [data-act="take-open"]');
+    openBtn.click();
+    const pre = document.querySelector('#takesBody .tbody pre');
+    ok('展开可回看成片正文', !!pre && pre.textContent.length > 20, pre ? pre.textContent.length + ' 字' : '无正文面板');
+    ok('展开后列出这篇用到的库存素材', nOf('#takesBody .tuse') > 0, nOf('#takesBody .tuse') + ' 条');
+    const savedBody = pre ? pre.textContent : '';
+    q('finalText').value = '临时覆盖掉的内容，用来验证载入功能是否真的回填。';
+    q('finalText').dispatchEvent(new Event('input'));
+    window.confirm = () => true;
+    document.querySelector('#takesBody [data-act="take-load"]').click();
+    ok('「载入这篇」把正文取回最终整理稿', q('finalText').value.trim() === savedBody.trim(), q('finalText').value.length + ' vs ' + savedBody.length);
+    const rmToast = document.querySelector('#takesBody [data-act="take-rematch"]');
+    rmToast.click();
+    ok('「重新匹配」给出明确结论', /篇共用到库存|没有新认出/.test(q('toast').textContent), q('toast').textContent);
+    /* ---- keep 豁免不得跨稿残留 ---- */
+    q('rawText').value = '大家好我是小王。\n根据行业数据显示，超过六成的装修纠纷都是来自增项。\n这句是实质内容关于报价方式。';
+    q('rawText').dispatchEvent(new Event('input'));
+    clk('preclean');
+    const rb = document.querySelector('#reportBody [data-act="restore"]');
+    if (rb) rb.click();
+    ok('放回后豁免已绑定当前稿件', /已放回 1 句/.test(q('keptInfo').textContent), q('keptInfo').textContent.replace(/\s+/g, ' '));
+    q('rawText').value = '完全不同的另一篇稿子内容。\n根据行业数据显示，超过六成的装修纠纷都是来自增项。\n这是另一篇的实质内容。';
+    q('rawText').dispatchEvent(new Event('input'));
+    clk('preclean');
+    ok('换稿后旧豁免作废且用户看得见提示', /豁免已作废/.test(q('toast').textContent) && !/已放回/.test(q('keptInfo').textContent), q('toast').textContent);
+    ok('换稿后该句仍被正常删除', !q('cleanText').value.includes('六成的装修纠纷'), q('cleanText').value.replace(/\n/g, ' | '));
+    q('vaultSearch').value = '不存在关键词zzz';
+    q('vaultSearch').dispatchEvent(new Event('input'));
+    ok('搜索无结果显示空态', /没有匹配/.test(q('vaultBody').textContent));
+    q('vaultSearch').value = '';
+    q('vaultSearch').dispatchEvent(new Event('input'));
+    ok('清空搜索后恢复列表', nOf('#vaultBody .vitem') > 0, nOf('#vaultBody .vitem') + ' 条');
+    let threw = '';
+    try { clk('vault-export'); } catch (e) { threw = e.message; }
+    ok('导出库存不抛错', !threw, threw);
+
+    /* ---- 缺口 → 从库存补件 ---- */
+    q('rawText').value = '有个客户嫌我家贵，他一直犹豫。\n我说价格可以再谈。\n后来他选了别家。\n我觉得报价准比报价低值钱。';
+    q('rawText').dispatchEvent(new Event('input'));
+    clk('preclean');
+    ok('薄故事报出缺口', nOf('#gapList .gap') >= 1, nOf('#gapList .gap') + ' 个缺口');
+    ok('缺口给出原因和补法', /——/.test(q('gapList').textContent));
+    ok('零件为 0 的桶被标红', nOf('#partsGrid .part.zero') >= 1, nOf('#partsGrid .part.zero') + ' 个空桶');
+    const ins = document.querySelector('#gapList [data-act="vault-insert"]');
+    if (ins) {
+      const fbefore = q('finalText').value.length;
+      ins.click();
+      ok('缺口面板可插入库存素材', q('finalText').value.length > fbefore, fbefore + ' → ' + q('finalText').value.length);
+    } else {
+      out.push('SKIP  缺口面板无可推荐库存（取决于当前库存类型）');
+    }
+
+    /* ---- 分段缺口：一段的窟窿不能被另一段掩盖 ---- */
+    q('rawText').value = '有个客户嫌贵，犹豫了半个月。\n我说价格可以再谈。\n后来他选了别家。\n\n另一个客户被别家多收了整整三万五。\n他半夜打电话给我，他说还是你实在。\n上个月翡翠湾姓李的业主，最后省了八千块。';
+    q('rawText').dispatchEvent(new Event('input'));
+    clk('preclean');
+    const gapTxt2 = q('gapList').textContent;
+    ok('按空行切成多段并逐段报缺口', /个故事段/.test(gapTxt2) && /第 1 段/.test(gapTxt2), gapTxt2.replace(/\s+/g, ' ').slice(0, 52));
+    const gapCards = [].slice.call(document.querySelectorAll('#gapList .gap .gw')).map(e => e.textContent);
+    ok('第一段缺结果被单独指出（不被第二段掩盖）',
+      gapCards.some(t => /缺「带数字的结果」/.test(t) && /第 1 段/.test(t)) &&
+      !/零件齐/.test(gapCards.join('')),
+      gapCards.length + ' 张卡：' + gapCards.map(s => s.replace(/\s+/g, ' ')).join(' / ').slice(0, 60));
+    /* ---- 改桶出口 ---- */
+    const sel0 = document.querySelector('#vaultBody select[data-act="vault-part"]');
+    ok('每条素材都有改桶下拉', !!sel0 && sel0.options.length === 7, sel0 ? sel0.options.length + ' 个选项' : '无下拉');
+    if (sel0) {
+      const grpBefore = nOf('#vaultBody .vgroup');
+      sel0.value = 'belief';
+      sel0.dispatchEvent(new Event('change', { bubbles: true }));   // 委托监听要求冒泡
+      const moved = [].slice.call(document.querySelectorAll('#vaultBody .vitem')).some(e =>
+        e.querySelector('select').value === 'belief' && /价值观金句/.test(e.querySelector('.vtag').textContent));
+      ok('改桶后归类与分组跟着变', moved && /已改到/.test(q('toast').textContent),
+        '组数 ' + grpBefore + ' → ' + nOf('#vaultBody .vgroup') + '；' + q('toast').textContent);
+    }
+    /* ---- 标签区分力：中性句不该被叫「第一人称故事」 ---- */
+    const neutral = KBCore.scoreSentences('我觉得这个报价方式要分三种情况处理。')[0];
+    ok('中性句不再滥发「第一人称故事」标签', !neutral || neutral.tags.indexOf('第一人称故事') === -1,
+      neutral ? neutral.tags.join(',') : '无输出');
+    const realStory = KBCore.scoreSentences('那天有个客户半夜给我打电话，说他被别家坑了三万五。')[0];
+    ok('真叙事句仍能拿到「第一人称故事」', !!realStory && realStory.tags.indexOf('第一人称故事') !== -1,
+      realStory ? realStory.tags.join(',') : '无输出');
+    /* ---- 空行必须活着穿过清洗管线，否则分段功能失效 ---- */
+    const epKeep = KBCore.preclean('第一段的一句话内容关于报价。\n还是第一段。\n\n第二段讲另一个客户的故事。\n也是第二段。',
+      { rules: {}, blacklist: [] });
+    ok('清洗后段落分隔仍在', epKeep.text.includes('\n\n'), JSON.stringify(epKeep.text));
+    ok('分段检测能认出 2 个故事段', KBCore.splitEpisodes(epKeep.text).length === 2,
+      KBCore.splitEpisodes(epKeep.text).length + ' 段');
+    const tcEp = KBCore.splitEpisodes('00:05 第一段内容。\n00:20 还是第一段。\n02:40 时间跳了两分半，这是第二段。');
+    ok('无空行时靠时间码大跳分段', tcEp.length === 2, tcEp.length + ' 段');
+
+    /* ---- 备份 / 容量 / 快捷键 ---- */
+    ok('备份导出与导入入口都在', !!document.querySelector('[data-act="export-backup"]') &&
+      !!document.querySelector('[data-act="import-backup"]') && !!q('importFile'));
+    let threw3 = '';
+    try { clk('export-backup'); } catch (e) { threw3 = e.message; }
+    ok('导出完整备份不抛错', !threw3, threw3);
+    ok('备份自检：随意 JSON 被拒 / 结构完整者被认', !KBCore.isBackup({ hello: 1 }) && !KBCore.isBackup(null) &&
+      KBCore.isBackup({ factors: [], vault: [], takes: [] }), '');
+    ok('导入合并会重映射素材 id（战绩链不断）', (() => {
+      const el = document.querySelector('#vaultBody .vitem .vmain');
+      const del = document.querySelector('#vaultBody .vitem [data-act="vault-del"]');
+      if (!el || !del) return false;
+      const id = del.dataset.id;
+      const r = KBCore.mergeBackup(
+        { vault: [{ id: id, text: el.textContent, parts: ['quote'] }], takes: [] },
+        { vault: [{ id: 'zz1', text: el.textContent, parts: ['quote'] }],
+          takes: [{ id: 'zt', title: '备份片', chars: 7, createdAt: 1, score: 5, used: ['zz1'] }] });
+      const tk = r.takes.filter(t => t.id === 'zt')[0];
+      return r.addedVault === 0 && tk.used.length === 1 && tk.used[0] === id;
+    })(), '');
+    /* 整条导入链路（含 id 重映射真的落到素材表现上） */
+    ok('导入走完整 UI 链路且战绩挂到本机素材上', (() => {
+      if (typeof window.kouboImport !== 'function') return false;
+      const el = document.querySelector('#vaultBody .vitem .vmain');
+      const del = document.querySelector('#vaultBody .vitem [data-act="vault-del"]');
+      if (!el || !del) return false;
+      const mineId = del.dataset.id;
+      const vBefore = +q('vaultTotal').textContent, tBefore = nOf('#takesBody .titem');
+      const r = window.kouboImport({
+        factors: KBCore.DEFAULT_FACTORS, blacklist: KBCore.DEFAULT_BLACKLIST,
+        vault: [{ id: 'zz9', text: el.textContent, parts: ['quote'] },
+          { id: 'zz8', text: '导入进来的一条新结果素材，最后省了八千块', parts: ['result'] }],
+        takes: [{ id: 'zzt', title: '自检导入的老片', chars: 333, createdAt: Date.now() - 1e8, score: 4, used: ['zz9', 'zz8'] }]
+      });
+      const shown = [].slice.call(document.querySelectorAll('#takesBody .titem .tt')).some(e => /自检导入的老片/.test(e.textContent));
+      const remapped = [].slice.call(document.querySelectorAll('#vaultBody .vitem')).some(e =>
+        e.querySelector('[data-act="vault-del"]').dataset.id === mineId && /均分 4\.0/.test(e.textContent));
+      return r.ok === true && +q('vaultTotal').textContent === vBefore + 1 &&
+        nOf('#takesBody .titem') === tBefore + 1 && shown && remapped;
+    })(), '');
+    ok('非备份 JSON 被整条链路拒绝', typeof window.kouboImport === 'function' && window.kouboImport({ hello: 1 }).ok === false, '');
+
+    q('rawText').value = '客户说还是你实在。\n那天他半夜打电话过来。';
+    q('rawText').dispatchEvent(new Event('input'));
+    q('cleanWrap').style.display = 'none';
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+    ok('Ctrl+Enter 触发预清洗', q('cleanWrap').style.display !== 'none' && /预清洗完成/.test(q('toast').textContent), q('toast').textContent.slice(0, 24));
+    q('titleInput').value = '快捷键测试稿';
+    q('finalText').value = '# 标题\n\n- 一句终稿内容测试快捷键';
+    q('finalText').dispatchEvent(new Event('input'));
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true }));
+    ok('Ctrl+S 走下载而不是弹浏览器保存框', /已下载|快捷键测试稿/.test(q('toast').textContent), q('toast').textContent.slice(0, 30));
+    ok('状态栏显示存档体积', /KB/.test(q('saveState').textContent), q('saveState').textContent);
+
+    /* ---- Prompt 随场景变化（自带前置条件，不依赖前面用例留下的文稿） ---- */
+    q('rawText').value = '有个客户嫌我家贵，他一直犹豫。\n我说价格可以再谈。\n后来他选了别家。\n我觉得报价准比报价低值钱。';
+    q('rawText').dispatchEvent(new Event('input'));
+    clk('preclean');
+    clk('build-prompt');
+    ok('无极限词时不硬塞红线段', !/# 合规红线/.test(q('promptText').value), q('riskCount').textContent);
+    ok('Prompt 含故事零件列', /故事零件/.test(q('promptText').value));
+    ok('薄故事的 Prompt 含缺口节', /这个故事目前缺的零件/.test(q('promptText').value));
+    q('rawText').value = '有个客户嫌贵，犹豫了半个月。\n我说价格可以再谈。\n后来他选了别家。\n\n另一个客户被别家多收了整整三万五。\n他半夜打电话给我，他说还是你实在。\n上个月翡翠湾姓李的业主，最后省了八千块。';
+    q('rawText').dispatchEvent(new Event('input'));
+    clk('preclean');
+    clk('build-prompt');
+    ok('多段稿的 Prompt 按段标出缺口', /缺口按段列出/.test(q('promptText').value) && /第 1 段「/.test(q('promptText').value),
+      (q('promptText').value.match(/第 \d 段「[^」]*」：/) || ['无']).join(' '));
+
+    /* ---- 持久化 ---- */
+    const saved = JSON.parse(localStorage.getItem('koubo-cleaner-v2') || '{}');
+    ok('素材库已写入本地存储', Array.isArray(saved.vault) && saved.vault.length > 0, 'vault=' + (saved.vault || []).length);
+    ok('放回豁免已持久化', Array.isArray(saved.keep), 'keep=' + (saved.keep || []).length);
+    ok('成片记录与评分已持久化', Array.isArray(saved.takes) && saved.takes.length >= 1 &&
+      saved.takes.some(t => (t.used || []).length > 0),
+      'takes=' + (saved.takes || []).length + ' 带素材关联=' + (saved.takes || []).filter(t => (t.used || []).length).length);
+    ok('库存排序偏好已持久化', ['unused', 'perf', 'busy'].indexOf(saved.libSort) !== -1, 'libSort=' + saved.libSort);
+
+    /* ---- 清空文稿不影响库存 ---- */
+    const vb = +q('vaultTotal').textContent;
+    clk('clear-raw');
+    ok('清空文稿保留素材库', +q('vaultTotal').textContent === vb && q('cleanWrap').style.display === 'none', vb + ' 条');
+    ok('清空文稿后面板归零', q('partsGrid').innerHTML === '' && q('riskList').innerHTML === '');
+    ok('清空文稿保留成片记录与评分', nOf('#takesBody .titem') >= 1 && /已回填表现/.test(q('takesStat').textContent), q('takesStat').textContent);
+  } catch (e) {
+    out.push('THREW  ' + (e && e.message));
+  }
+
+  const pass = out.filter(x => x.indexOf('PASS') === 0).length;
+  const fail = out.filter(x => x.indexOf('FAIL') === 0).length;
+  document.title = 'SELFTEST ' + (fail ? 'FAILED ' : 'ALL-OK ') + pass + '/' + out.length;
+  const box = document.createElement('pre');
+  box.id = 'selfTestOut';
+  box.setAttribute('style', 'margin:0;padding:14px 18px;background:#1f2733;color:#e5e7eb;font:12px/1.6 ui-monospace,Menlo,Consolas,monospace;white-space:pre-wrap');
+  box.textContent = 'SELFTEST ' + (fail ? 'FAILED' : 'ALL-OK') + ' — ' + pass + ' pass / ' + fail + ' fail / ' + out.length + ' total\n' + out.join('\n');
+  document.body.insertBefore(box, document.body.firstChild);
+
+  /* 还原用户真实存档，并把结果写在报告最后一行，让人看得见 */
+  let restoreMsg = '';
+  try {
+    if (SAVED === null) localStorage.removeItem('koubo-cleaner-v2');
+    else localStorage.setItem('koubo-cleaner-v2', SAVED);
+    const back = JSON.parse(SAVED || '{}');
+    restoreMsg = '存档已还原：素材 ' + (back.vault || []).length + ' 条 · 成片 ' + (back.takes || []).length +
+      ' 条 · 文稿 ' + String(back.raw || '').length + ' 字' +
+      ' · 下载/复制被拦截 ' + ((window.__kouboDownloads || []).length) + '/' + ((window.__kouboCopies || []).length) + ' 次（未落地）';
+  } catch (e) { restoreMsg = '存档还原失败：' + e.message; }
+  box.textContent += '\n' + restoreMsg;
+  window.__kouboQuiet.on = false;   // 关安静档，恢复正常下载/复制能力
+  }
+
+  /* 必须等 init() 跑完再自检（init 也挂在 DOMContentLoaded 上，且注册在先） */
+  window.kouboSelftest = run;   // 任何时候都能从控制台直接跑：kouboSelftest()
+  if (AUTORUN) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+    else run();
+  }
+})();
+</script>
+</body>
+</html>

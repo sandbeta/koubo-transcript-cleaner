@@ -1,0 +1,668 @@
+/* ==========================================================================
+   星露谷 · 口播文字稿整理工具 UI 皮肤
+   复刻的是视觉语言，不是原版素材（游戏贴图受版权保护）：
+   三层木框 + 羊皮内芯 + 木带标题 + 木板按钮 + 背包格 + 抖动像素 + 描边字。
+
+   为什么星露谷适合这个工具：它的面板内芯本来就是「米黄羊皮 + 深棕字」，
+   高对比、暖色、适合久读——而这个工具的核心动作就是读中文稿子。
+   所以这一版以羊皮浅色为主档，深色做「夜晚谷仓」副档。
+
+   零网络请求：不引字体、不引图片，所有质感用 CSS 画。
+   底线不变：像素只进框架不进正文；正文 ≥17px、对比度 ≥4.5:1、命中区 ≥24px。
+   规矩：色值只出现在 :root 与暗档覆盖块，组件只引令牌。
+   ========================================================================== */
+
+:root {
+  /* —— 谷仓色阶 —— */
+  --wood-dark:   #3B2A1A;   /* 外框描边 */
+  --wood-mid:    #8B5A2B;   /* 木带、按钮底 */
+  --wood-light:  #B07B45;   /* 斜面高光 */
+  --wood-pale:   #C99A5F;
+  --parchment:   #F2E2B8;   /* 面板内芯 */
+  --parchment-2: #E8D5A4;   /* 次级面板 */
+  --slot:        #DCC99C;   /* 背包空格 */
+  --sky:         #8EC9E8;
+  --sky-2:       #C9E6F2;
+  --grass:       #6FA84E;
+  --grass-2:     #4E9131;
+  --coin:        #E3B23C;
+  --berry:       #C4402F;
+  --berry-2:     #A32B1E;
+  /* 删除线的常态色。上一版常态就是全不透明的 --berry，等于"已经很重"，
+     悬停时没有加重的余地——hover 反馈必须留出色差空间才做得出来。
+     .72 不是估的：按非文本图形 3:1 反解出来的最小档（.45 时只有 2.08:1，看不见）。 */
+  --berry-line:  rgba(163, 43, 30, .72);
+  --milk:        #FFF8E7;   /* 只当纸面用：夜里会变近黑 */
+  /* 云与天空上的字：夜里也必须亮着。它们绝不能复用 --milk——
+     第 7 轮实测暗档标题几乎看不见，就是因为 --milk 当纸面时会翻成近黑 */
+  --cloud:       #FFF8E7;
+  --ink-on-sky:  #FFF8E7;
+  --straw:       #FBE9C9;   /* 枯草底：待删提示 */
+  --rot:         #F7DDD7;   /* 腐坏底：必须改 */
+  --sprout:      #DFEFD3;   /* 新芽底：通过 */
+
+  /* —— 产品已有令牌的重映射（内联样式与 JS 片段都引这些名字）—— */
+  --bg-page:  #6B4F32;      /* 页面底 = 泥地，比卡片暗，层次才立得住 */
+  --bg-card:  var(--parchment);
+  --bg-sub:   var(--parchment-2);
+  --text-1:   #3B2A1A;      /* 深棕墨：羊皮上对比极高 */
+  --text-2:   #5C4326;
+  --text-3:   #6E5533;      /* 弱化说明下限 */
+  --text-ph:  #6E5533;
+  --accent:     #2E6B3F;    /* 草绿：主操作 */
+  --accent-ink: #215030;
+  --ok:       #2E6B3F;
+  --ok-solid: #2E6B3F;
+  --hit:      #8A5A0B;      /* 待删 = 枯叶棕黄 */
+  --bad:      #A32B1E;      /* 极限词 = 浆果红 */
+  --line:     #C9AE78;
+  --line-soft:#D8C08A;
+  --focus:    #1F5E9E;
+
+  /* —— 语义层 —— */
+  --surface-app:   var(--bg-page);
+  --surface-paper: var(--parchment);
+  --surface-panel: var(--parchment-2);
+  --surface-select:#CFE3C2;
+  --surface-hover: #E2CE9C;
+  /* 按「压在什么材质上」分家，不按颜色长相分：同一色既当文字又当背景，两档必有一档错 */
+  --ink-on-wood:   #FFF3D4;   /* 木板 / 绿板 / 红板上的字，两档都用它，所以那些板两档都得够深 */
+  --ink-on-gold:   #241A08;   /* 金币、读数窗上的字 */
+  --leaf-hi:       #4E9B5F;   /* 主操作木板的绿：与文字用的 --accent 分开 */
+  --leaf-lo:       #2E6B3F;
+  --clay-hi:       #C4402F;   /* 危险 toast 的红 */
+  --clay-lo:       #A32B1E;
+  --edge-field:    var(--wood-dark);
+  --focus-ring:    rgba(31, 94, 158, .34);
+  --shadow-hard:   #2A1D10;   /* 硬投影：不透明、无模糊 */
+  --bevel-hi:      rgba(255, 244, 214, .55);
+  --bevel-lo:      rgba(59, 42, 26, .45);
+  --wood-face:     repeating-linear-gradient(90deg, var(--grain) 0 2px, transparent 2px 7px),
+                   linear-gradient(var(--wood-light) 0%, var(--wood-mid) 100%);
+  /* 板纹做进 --wood-face 本身：按钮、木带标题、状态条、toast 一次性全长出木纹，
+     不用逐处补，也不会漏。平涂的棕色只会让它看起来"是个深色网站"，不是星露谷。 */
+  --grain:         rgba(59, 42, 26, .16);
+  --grass-dither:  repeating-conic-gradient(from 0deg, rgba(20, 40, 16, .22) 0% 25%, transparent 0% 50%);
+
+  --font-ui:   "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", "Hiragino Sans GB", system-ui, sans-serif;
+  --font-num:  "Consolas", "Cascadia Mono", ui-monospace, Menlo, monospace;
+  --font-read: "PingFang SC", "Microsoft YaHei", "Source Han Sans SC", system-ui, sans-serif;
+  --target: 28px;
+  --measure: 76ch;   /* ch 是「0」字符宽，1 汉字 = 2ch：76ch ≈ 38 个汉字 */
+
+  /* —— 动效令牌：时长与节奏只在这里定义一次 ——
+     散在七条规则里的 160ms 就是"同一个项目里动效忽快忽慢"的成因。
+     全部用 steps()：像素画的按下、着色、弹出本来就不是连续插值，是换帧。
+     唯一的例外是 --t-env（云），它用 steps 不是为了"手 K 感"而是为了不糊边——
+     见下面 --blk 的说明。 */
+  --blk: 6px;                       /* 像素块基准：位移必须是它的整数倍，亚像素插值会把硬边糊成灰边 */
+  --t-hover:  100ms steps(2, end);  /* hover 着色 */
+  --t-ctrl:   160ms steps(3, end);  /* 控件状态翻转着色 */
+  --t-panel:  140ms steps(4, end);  /* 面板入场 */
+  --t-pop:    160ms steps(4, end);  /* toast */
+  --t-drawer: 200ms steps(7, end);  /* 抽屉 */
+  --t-env:    36s   steps(6, end);  /* 云：36px ÷ 6 块 = 每 3 秒跳一格 */
+}
+
+/* ============================ 基础 ============================ */
+* { border-radius: 0 !important; }
+html, body {
+  background: var(--surface-app);
+  color: var(--text-1);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.6;
+}
+/* 泥地纹理：抖动点阵，纯 CSS */
+body {
+  background-image: repeating-conic-gradient(from 0deg, rgba(0, 0, 0, .07) 0% 25%, transparent 0% 50%);
+  background-size: 4px 4px;
+}
+.wrap { max-width: 1680px; padding: 18px 20px 44px; }
+h1, h2, h3 { font-family: var(--font-ui); letter-spacing: .01em; }
+
+/* ============================ 标题屏：头部画成农场 ============================ */
+.app-head {
+  /* 图层顺序 = 从上到下：栅栏板 → 横梁 → 草地颗粒 → 天空到草地。
+     栅栏板压在横梁前面，缝隙里露出横梁，就是一排尖桩栅栏。
+     地平线压到 74%：上一版 58% 太浅，副标题正好骑在天地交界上，"Markdown"
+     几个字落在草地上被吃掉一半——这是看真实渲染才发现的，缩略图看不出来。 */
+  background:
+    repeating-linear-gradient(90deg, var(--wood-pale) 0 6px, transparent 6px 22px) left bottom / 100% 18px no-repeat,
+    linear-gradient(var(--wood-light), var(--wood-mid)) left bottom 11px / 100% 4px no-repeat,
+    linear-gradient(var(--wood-light), var(--wood-mid)) left bottom 3px / 100% 4px no-repeat,
+    var(--grass-dither) left bottom / 100% 26% no-repeat,
+    linear-gradient(var(--sky) 0%, var(--sky-2) 74%, var(--grass) 74%, var(--grass-2) 100%);
+  border: 3px solid var(--wood-dark);
+  box-shadow: 0 0 0 3px var(--wood-light), 5px 5px 0 var(--shadow-hard);
+  padding: 18px 18px 40px;
+  position: relative;
+  overflow: hidden;
+}
+/* 像素云：一个 6px 方块用 box-shadow 堆出阶梯轮廓。
+   上一版用 4px 单位，在 1440px 宽的头里几乎看不见——像素画的尺度要跟着版面走。 */
+.app-head::before {
+  content: ""; position: absolute; top: 16px; left: 7%;
+  width: 6px; height: 6px; background: var(--cloud);
+  box-shadow:
+    6px 0 var(--cloud), 12px 0 var(--cloud), 18px 0 var(--cloud), 24px 0 var(--cloud),
+    6px -6px var(--cloud), 12px -6px var(--cloud), 18px -6px var(--cloud),
+    0 6px var(--cloud), 6px 6px var(--cloud), 12px 6px var(--cloud), 18px 6px var(--cloud), 24px 6px var(--cloud), 30px 6px var(--cloud);
+  /* 云在飘。位移 36px = 6 个像素块，steps(6) 保证每一帧都落在整块网格上——
+     亚像素插值会把 6px 方块的硬边糊成灰边，那正是像素风最怕的事。
+     每 3 秒跳一格：慢到不构成"有事情正在发生"的信号，但标题屏是个地方而不是张图。
+     只动 ::before：::after 里混着 5 个 --grass-2 的草簇偏移，整块平移会把草拖走。
+     关键帧首尾同位，因为产品那条 `*,*::before,*::after` 的减动档会把循环砍成单趟，
+     不同位就等于给减动用户留下一个停在错误位置的云。 */
+  animation: cloud-drift var(--t-env) infinite;
+}
+@keyframes cloud-drift {
+  0%, 100% { transform: none; }
+  50% { transform: translateX(calc(var(--blk) * 6)); }
+}
+/* 第二朵云 + 远处树冠 */
+.app-head::after {
+  content: ""; position: absolute; top: 30px; right: 12%;
+  width: 6px; height: 6px; background: var(--cloud);
+  box-shadow:
+    6px 0 var(--cloud), 12px 0 var(--cloud), 18px 0 var(--cloud),
+    6px -6px var(--cloud), 12px -6px var(--cloud),
+    0 6px var(--cloud), 6px 6px var(--cloud), 12px 6px var(--cloud), 18px 6px var(--cloud),
+    42px 12px var(--grass-2), 48px 12px var(--grass-2),
+    42px 18px var(--grass-2), 48px 18px var(--grass-2), 42px 6px var(--grass-2), 48px 6px var(--grass-2);
+}
+.app-head h1 {
+  font-size: 24px; font-weight: 800; color: var(--ink-on-sky);
+  /* 像素描边字：八向硬偏移，不是模糊阴影 */
+  text-shadow:
+    2px 0 var(--wood-dark), -2px 0 var(--wood-dark),
+    0 2px var(--wood-dark), 0 -2px var(--wood-dark),
+    2px 2px var(--wood-dark), -2px -2px var(--wood-dark),
+    2px -2px var(--wood-dark), -2px 2px var(--wood-dark);
+}
+.app-head p { color: var(--ink-on-sky); margin-left: 34px; text-shadow: 1px 1px 0 var(--wood-dark); }
+.app-head .logo { width: 22px; height: 22px; color: var(--coin); }
+.app-head > * { position: relative; z-index: 1; }
+
+/* ============================ 木框面板（三层） ============================ */
+.card {
+  background: var(--parchment);
+  border: 3px solid var(--wood-dark);
+  box-shadow:
+    inset 0 0 0 2px var(--wood-light),      /* 内斜面 */
+    inset 0 0 0 3px var(--bevel-hi),
+    5px 5px 0 var(--shadow-hard);           /* 硬投影 */
+  padding: 0 0 16px;
+}
+/* 木带标题 */
+.card > h2 {
+  margin: 0 0 14px;
+  padding: 8px 14px;
+  font-size: 14px;
+  color: var(--ink-on-wood);
+  background: var(--wood-face);
+  border-bottom: 3px solid var(--wood-dark);
+  box-shadow: inset 0 1px 0 var(--bevel-hi);
+  text-shadow: 1px 1px 0 var(--wood-dark);
+  display: flex; align-items: center; gap: 8px;
+}
+.card > h2 .ico { font-family: var(--font-num); color: var(--coin); font-weight: 700; }
+/* 木带通铺，其余内容左右留出框边 */
+.card > *:not(h2) { margin-left: 14px; margin-right: 14px; }
+
+/* 次级面板：星露谷的分层靠"凹进去"，不靠色差。
+   实测 #E8D5A4 压在 #F2E2B8 上几乎分不开（图底关系太弱），
+   所以用左上暗、右下亮的内斜面把它雕成凹槽，而不是继续加深底色。 */
+.sub {
+  background: var(--parchment-2);
+  border: 2px solid var(--wood-mid);
+  box-shadow:
+    inset 2px 2px 0 var(--bevel-lo),
+    inset -1px -1px 0 var(--bevel-hi);
+  padding: 11px 12px 12px;
+}
+.sub-title { color: var(--text-1); font-weight: 700; margin-bottom: 7px; }
+.sub-title .hint { color: var(--text-3); }
+
+/* ============================ HUD 状态条 ============================ */
+.statusbar {
+  margin-top: 14px;
+  background: var(--wood-face);
+  border: 3px solid var(--wood-dark);
+  box-shadow: inset 0 1px 0 var(--bevel-hi), 5px 5px 0 var(--shadow-hard);
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--ink-on-wood);
+  text-shadow: 1px 1px 0 var(--wood-dark);
+}
+.statusbar .ok { color: var(--ink-on-wood); font-weight: 800; }
+.statusbar b { color: var(--coin); }
+/* 计数 = 读数窗 */
+.count {
+  min-width: 30px;
+  background: var(--milk);
+  border: 2px solid var(--wood-dark);
+  color: var(--wood-dark);
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+  padding: 0 6px;
+  box-shadow: inset -1px -1px 0 var(--slot);
+}
+/* 版本徽标：2px 深棕描边在小尺寸下把金币色压成一团黑（实测）。
+   改细边 + 内高光，让它读作"钉在标题旁的铜牌"而不是墨块。 */
+.pill {
+  background: var(--coin);
+  color: var(--ink-on-gold);
+  border: 1px solid var(--wood-dark);
+  box-shadow: inset 0 1px 0 var(--bevel-hi), inset 0 -1px 0 var(--bevel-lo);
+  font-family: var(--font-num);
+  font-size: 12px; font-weight: 800;
+  padding: 1px 7px;
+}
+
+.grid { grid-template-columns: minmax(0, 1.34fr) minmax(0, 1fr); gap: 18px; margin-top: 18px; }
+.col { gap: 18px; }
+
+/* ============================ 木板按钮 ============================ */
+.btn {
+  font-family: var(--font-ui);
+  font-size: 13px; font-weight: 700;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 3px solid var(--wood-dark);
+  background: var(--wood-face);
+  color: var(--ink-on-wood);
+  text-shadow: 1px 1px 0 var(--wood-dark);
+  box-shadow: inset 0 1px 0 var(--bevel-hi), 3px 3px 0 var(--shadow-hard);
+  cursor: pointer;
+  /* 按下必须当帧换状态。原来这里挂着 `transform .05s steps(2)` 和 `box-shadow .05s steps(2)`：
+     手指已经按下、木板还在半空，而这是全工具重复次数最高的动作——50ms 会被重复成"手感肉"。
+     动画 box-shadow 本身也是禁的。位移和投影都归到 :active 静态值，只有 hover 提亮走过渡。 */
+  transition: filter var(--t-hover);
+}
+.btn:hover { filter: brightness(1.1); }
+.btn:active { transform: translate(3px, 3px); box-shadow: inset 0 1px 0 var(--bevel-hi), 0 0 0 var(--shadow-hard); }
+.btn-primary { background: linear-gradient(var(--leaf-hi), var(--leaf-lo)); }
+.btn-primary:hover { filter: brightness(1.12); }
+.btn-ghost { background: var(--parchment-2); color: var(--text-1); text-shadow: none; }
+.btn-ghost:hover { background: var(--surface-hover); }
+.btn-quiet { background: var(--parchment); color: var(--text-2); text-shadow: none; border-color: var(--wood-mid); }
+.btn-quiet:hover { background: var(--surface-hover); color: var(--text-1); }
+
+/* ============================ 输入：羊皮纸面 ============================ */
+input[type=text], textarea {
+  font-family: var(--font-ui);
+  font-size: 14px;
+  color: var(--text-1);
+  background: var(--milk);
+  border: 2px solid var(--wood-dark);
+  box-shadow: inset 2px 2px 0 var(--slot);
+  padding: 8px 10px;
+}
+input[type=text]:focus, textarea:focus {
+  border-color: var(--focus);
+  box-shadow: inset 2px 2px 0 var(--slot), 0 0 0 3px var(--focus-ring);
+}
+input::placeholder, textarea::placeholder { color: var(--text-3); }
+
+/* 背包格 */
+.chips { gap: 6px; margin-bottom: 9px; }
+.chip {
+  background: var(--slot);
+  border: 2px solid var(--wood-dark);
+  color: var(--text-1);
+  padding: 3px 3px 3px 9px;
+  font-size: 13px; font-weight: 600;
+  min-height: var(--target);
+  align-items: center;
+  box-shadow: inset 1px 1px 0 var(--bevel-hi);
+}
+.chip button {
+  min-width: 24px; min-height: 24px;
+  border: 1px solid var(--wood-mid);
+  background: var(--parchment);
+  color: var(--text-2);
+}
+.chip button:hover { background: var(--berry); color: var(--ink-on-wood); }
+.chip.empty { background: var(--parchment-2); color: var(--text-3); }
+
+.rules { gap: 4px; }
+.rule { min-height: 30px; color: var(--text-1); }
+.rule input { accent-color: var(--accent); width: 16px; height: 16px; }
+.rule .hint { color: var(--text-3); }
+
+.seg { border: 2px solid var(--wood-dark); background: var(--parchment-2); padding: 2px; gap: 2px; }
+.seg label { min-height: 26px; padding: 0 12px; display: inline-flex; align-items: center; color: var(--text-2); font-size: 13px; transition: background var(--t-hover); }
+.seg label:hover { background: var(--surface-hover); }
+.seg input:checked + span { color: var(--accent-ink); font-weight: 800; }
+.seg label:has(input:checked) { background: var(--surface-select); box-shadow: inset 0 0 0 1px var(--accent); }
+
+/* ============================ 稿纸：羊皮卷轴 ============================ */
+textarea { line-height: 1.75; min-height: 130px; }
+.ta-dash { border: 2px dashed var(--wood-mid); background: var(--milk); }
+#rawText, #cleanText, #finalText {
+  font-family: var(--font-read);
+  font-size: 17px;
+  line-height: 1.9;
+  color: var(--text-1);
+  max-width: var(--measure);
+}
+#rawText, #cleanText { min-height: 250px; }
+#finalText { min-height: 320px; }
+#promptText {
+  font-family: var(--font-num);
+  font-size: 13px; line-height: 1.7;
+  background: var(--parchment-2);
+  color: var(--text-1);
+}
+.meta { gap: 8px 16px; font-size: 12px; color: var(--text-3); }
+.meta .k { color: var(--accent-ink); font-family: var(--font-num); font-weight: 800; }
+.actions { gap: 10px; }
+
+/* ============================ 清洗报告 ============================ */
+.report {
+  background: var(--milk);
+  border: 3px solid var(--wood-dark);
+  box-shadow: inset 0 0 0 2px var(--wood-light), 5px 5px 0 var(--shadow-hard);
+}
+.report > .rh {
+  background: var(--wood-face);
+  color: var(--ink-on-wood);
+  border-bottom: 3px solid var(--wood-dark);
+  padding: 8px 12px;
+  font-size: 13px; font-weight: 700;
+  text-shadow: 1px 1px 0 var(--wood-dark);
+  display: flex; align-items: center; gap: 8px;
+}
+.report-body { padding: 12px 14px; }
+.rline {
+  /* 名字列 104→92、计数列 46→42、间距 10→8：把宽度让给示例句，
+     真实渲染里「放回」常被挤到第二行，报告排布变毛糙 */
+  grid-template-columns: 92px 42px minmax(0, 1fr);
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 2px dotted var(--line);
+  font-size: 13px;
+}
+.rline:last-child { border-bottom: 0; }
+.rline .nm { color: var(--text-1); font-weight: 700; }
+.rline .ct { font-family: var(--font-num); color: var(--text-3); font-weight: 800; }
+.rline .ct.hit { color: var(--hit); }
+.rline .ct.zero { color: var(--text-3); }
+/* 示例句等宽：逐句核对要把删/留两句上下排成列比差异 */
+.rline .ex { font-family: var(--font-num); font-size: 15.5px; line-height: 1.75; color: var(--text-1); }
+.rline .ex > div { margin-bottom: 9px !important; }
+/* 删除的句子必须仍然可读——判断"这刀切对了吗"要看清原句；
+   状态靠删除线 + 左侧枯叶色条表达，不靠降对比 */
+.rline .ex > div:has(s) { border-left: 3px solid var(--hit); padding-left: 10px; }
+.rline .ex s {
+  color: var(--text-1); text-decoration: line-through;
+  text-decoration-thickness: 2px; text-decoration-color: var(--berry-line);
+  /* 常态线放轻，悬停时"变实 + 加粗"，回答的是用户真会问的那句：
+     「这句到底被删成什么样了」。
+     不做入场画线：renderReport 每次 innerHTML='' 整块重建，
+     入场动画会在每一次点「放回」后把所有行重播一遍，
+     而且变了的那一行恰恰是消失的那一行——动画对象错了。
+     用原生装饰而不是 ::after scaleX：示例句会长到换行，
+     行内盒的绝对定位子元素取的是所有片段并集的外接盒，跨行会画错。 */
+  transition: text-decoration-color var(--t-hover), text-decoration-thickness var(--t-hover);
+}
+.rline .ex s:hover { text-decoration-color: var(--berry); text-decoration-thickness: 3px; }
+/* 理由是"说明"不是"操作"：中性标签，别和按钮撞色 */
+.rline .ex em {
+  color: var(--text-3); background: var(--parchment-2);
+  border: 1px solid var(--wood-mid); padding: 0 5px;
+  font-style: normal; font-weight: 700; font-family: var(--font-num); font-size: 11.5px;
+}
+
+/* 放回 / 收回这类行内操作：必须是"能按的东西"的样子。
+   上一版只把文字色改成绿，底色仍和理由标签同为 --parchment-2，
+   真实渲染里两者看起来是同一类对象——"不同色"是假修复，底色才决定归类。 */
+.mini {
+  min-height: var(--target);
+  padding: 0 10px;
+  background: var(--sprout);
+  border: 2px solid var(--accent);
+  color: var(--accent-ink);
+  font-family: var(--font-ui);
+  font-size: 12.5px; font-weight: 800;
+  box-shadow: inset 0 1px 0 var(--bevel-hi), 2px 2px 0 var(--shadow-hard);
+  /* 「放回」是逐句核对时点得最多的按钮，hover 该有反馈；
+     只给 background 加过渡，:active 的位移照旧当帧完成（同 .btn 的理由） */
+  transition: background var(--t-hover);
+}
+.mini:hover { background: var(--surface-select); }
+.mini:active { transform: translate(2px, 2px); box-shadow: inset 0 1px 0 var(--bevel-hi), 0 0 0 var(--shadow-hard); }
+.mini.warn { color: var(--hit); border-color: var(--hit); background: var(--straw); }
+.mini.warn:hover { background: var(--straw); }
+.keptback { color: var(--ok); font-weight: 800; font-size: 12.5px; }
+
+.gem {
+  background: var(--parchment);
+  border: 2px solid var(--wood-mid);
+  border-left: 4px solid var(--accent);
+  box-shadow: inset 0 1px 0 var(--bevel-hi);
+  padding: 9px 12px;
+}
+.gem .gt { color: var(--text-1); font-family: var(--font-num); font-size: 15px; line-height: 1.75; }
+.gem .gs { color: var(--text-3); font-size: 12px; font-family: var(--font-num); }
+.gem .score { color: var(--accent-ink); font-weight: 800; font-family: var(--font-num); }
+.gem .pick { color: var(--accent-ink); font-weight: 800; text-decoration: underline; }
+
+.note, .tip { color: var(--text-3); font-size: 12.5px; }
+.warn { color: var(--hit); }
+/* 终稿从「缺结构」变成「✓ 结构完整，可以下载交给剪辑」，是整个工作流里唯一的
+   交付时刻，而它现在只是颜色当帧硬切。两半一起改才有意义：
+   ① 落点色从 --text-3(灰) 换成 --ok(叶绿)——否则 160ms 是从灰淡入到灰，等于不动；
+      合格性已有静态保证：--ok 压 --bg-card 日档 4.97:1、夜档 8.15:1。
+   ② 着色过渡。#finalWarn 是常驻元素、变的是 class，transition 天然只在真变时触发，
+      不存在重建重播的问题。 */
+#finalWarn { transition: color var(--t-ctrl); }
+#finalWarn:not(.warn) { color: var(--ok); }
+
+/* ============================ 风险 / 零件 / 缺口 ============================ */
+.risk-item { background: var(--straw); border: 2px solid var(--wood-mid); border-left: 4px solid var(--hit); padding: 9px 12px; }
+.risk-item .rw { color: var(--hit); font-weight: 800; }
+.risk-item .rs { color: var(--text-2); }
+.risk-item .rf { color: var(--ok); }
+.risk-item .rcat { background: var(--parchment); color: var(--hit); border: 1px solid var(--wood-mid); padding: 0 6px; font-family: var(--font-num); font-size: 11.5px; }
+.risk-item.high { background: var(--rot); border-left-color: var(--berry-2); }
+.risk-item.high .rw { color: var(--berry-2); }
+.risk-item.high .rcat { color: var(--berry-2); }
+
+.parts { grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+.part { background: var(--slot); border: 2px solid var(--wood-dark); box-shadow: inset 1px 1px 0 var(--bevel-hi); padding: 8px 9px; }
+.part .pn { color: var(--text-1); font-weight: 800; }
+.part .pr { color: var(--text-3); }
+.part .pc { color: var(--accent-ink); font-family: var(--font-num); }
+.part.zero { background: var(--rot); border-color: var(--berry-2); }
+.part.zero .pc { color: var(--berry-2); }
+
+.gap { background: var(--straw); border: 2px dashed var(--wood-mid); padding: 9px 12px; }
+.gap.high { border-style: solid; border-color: var(--berry-2); background: var(--rot); }
+.gap.ok { border-style: solid; border-color: var(--ok); background: var(--sprout); }
+.gap .gseg { color: var(--text-2); }
+.gap .gw { color: var(--text-1); }
+.gap .gwhy { color: var(--text-2); }
+.gap .ghow { color: var(--ok); }
+.psel { background: var(--milk); border: 2px solid var(--wood-dark); color: var(--text-1); min-height: var(--target); font-size: 12.5px; }
+.fixrow { background: var(--parchment); border: 2px solid var(--wood-mid); }
+.fixrow .ftx { color: var(--text-1); font-family: var(--font-num); font-size: 14.5px; line-height: 1.75; }
+.fixrow .fsim { color: var(--text-3); font-family: var(--font-num); }
+
+/* ============================ 素材库 / 成片 ============================ */
+.vault-bar .stat b, #vaultPerf { color: var(--accent-ink); font-family: var(--font-num); }
+.vgroup > h3 { color: var(--text-1); font-size: 13px; }
+.vgroup > h3 .cnt { color: var(--text-3); font-family: var(--font-num); }
+.vitem { background: var(--parchment); border: 2px solid var(--wood-mid); box-shadow: inset 0 1px 0 var(--bevel-hi); padding: 9px 11px; }
+.vitem .vtx { color: var(--text-1); font-family: var(--font-num); font-size: 15px; line-height: 1.75; }
+.vitem .vmeta { color: var(--text-3); font-size: 12px; font-family: var(--font-num); }
+.vitem .vtag { background: var(--surface-select); color: var(--accent-ink); border: 1px solid var(--accent); padding: 0 6px; font-family: var(--font-num); font-size: 11.5px; font-weight: 700; }
+.vitem.unused { border-left: 4px solid var(--ok); background: var(--sprout); }
+.vitem.duped { border-left: 4px solid var(--hit); background: var(--straw); }
+.vempty { color: var(--text-3); }
+.badge { background: var(--parchment-2); color: var(--text-1); border: 2px solid var(--wood-mid); font-family: var(--font-num); }
+.badge.hot { background: var(--sprout); color: var(--accent-ink); border-color: var(--ok); }
+.badge.warn { background: var(--straw); color: var(--hit); border-color: var(--hit); }
+
+.titem { background: var(--parchment); border: 2px solid var(--wood-dark); box-shadow: inset 0 1px 0 var(--bevel-hi); }
+.titem.rated { border-left: 4px solid var(--coin); }
+.titem .tt { color: var(--text-1); font-size: 14px; font-weight: 800; }
+.titem .tmeta { color: var(--text-3); font-family: var(--font-num); }
+.tpending { color: var(--hit); font-weight: 800; }
+/* 评分按钮 = 一排背包格 */
+.star {
+  width: var(--target); height: var(--target);
+  border: 2px solid var(--wood-dark);
+  background: var(--slot);
+  color: var(--text-1);
+  font-family: var(--font-num); font-weight: 800;
+  box-shadow: inset 1px 1px 0 var(--bevel-hi);
+}
+.star:hover { background: var(--parchment); }
+.star.on { background: var(--coin); border-color: var(--wood-dark); color: var(--ink-on-gold); }
+.tbody { border-top: 2px dotted var(--line); }
+.tbody pre { background: var(--parchment-2); border: 2px solid var(--wood-mid); font-family: var(--font-num); color: var(--text-1); }
+.tuse { color: var(--text-2); }
+
+/* ============================ toast / 页脚 / 焦点 ============================ */
+#toast {
+  background: var(--wood-face);
+  color: var(--ink-on-wood);
+  border: 3px solid var(--wood-dark);
+  box-shadow: inset 0 1px 0 var(--bevel-hi), 5px 5px 0 var(--shadow-hard);
+  font-size: 13px; font-weight: 800;
+  text-shadow: 1px 1px 0 var(--wood-dark);
+  /* 180→160ms：它后面还有 2200ms 停留，入场不该抢。
+     连续第二条 toast 类名不变、过渡不会重放——这是可接受的：
+     第一条还在屏幕上，换文字本来就不该再弹一次。 */
+  transition: opacity var(--t-pop), transform var(--t-pop);
+}
+#toast.good { background: linear-gradient(var(--leaf-hi), var(--leaf-lo)); }
+#toast.bad { background: linear-gradient(var(--clay-hi), var(--clay-lo)); }
+/* 页脚也装进木框：星露谷本来把所有东西都放在框里。
+   顺带修掉「页脚文字直接压在泥地底上只有 1.08:1」和「焦点环在泥地上看不见」 */
+footer.foot {
+  margin-top: 20px; padding: 14px 16px;
+  background: var(--parchment);
+  border: 3px solid var(--wood-dark);
+  box-shadow: inset 0 0 0 2px var(--wood-light), 5px 5px 0 var(--shadow-hard);
+  color: var(--text-2);
+}
+.kbd-hint { color: var(--text-2); }
+.kbd-hint kbd {
+  background: var(--milk);
+  border: 2px solid var(--wood-dark);
+  color: var(--text-1);
+  box-shadow: 2px 2px 0 var(--shadow-hard);
+  font-family: var(--font-num);
+}
+a:focus-visible, button:focus-visible, [tabindex]:focus-visible,
+input:focus-visible, textarea:focus-visible, select:focus-visible,
+input[type=checkbox]:focus-visible, input[type=radio]:focus-visible,
+.seg label:has(input:focus-visible) {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+
+/* ============================ 动效：状态级与环境级 ============================
+   原则：只动 transform / opacity / 绘制色；不新增任何 box-shadow 动画；
+   UI 动效全部 ≤300ms；节奏统一走 --t-* 令牌，别在规则里写魔法数字。
+   选目标的方法不是"还有什么能动"，而是"界面上哪些东西的值会变、而它现在是硬切的"。
+   在 0 行 JS 的前提下，只有 class 变化、display 变化、伪元素状态能被免费点亮；
+   textContent 变化（字数、徽章、状态栏）CSS 观察不到，别硬做。 */
+
+/* ② 清洗稿出现的那一下。这是全工具唯一一个"用户劳动成果从无到有"的翻转：
+   HTML 里写死 style="display:none"，applyClean 设成 ''，清空时设回 'none'。
+   已经是 '' 时再赋 '' 不产生变化，所以入场天然只在真出现那一次触发。
+   不支持 @starting-style 的老浏览器拿不到动画、但拿得到正确终态，降级是免费的。
+   页内自检读的是内联 style.display（全文件 getComputedStyle 出现 0 次），碰不到。
+   ⚠ 不要把 display 也加进 transition 列表（实测）：allow-discrete 会让 display 在
+   前 50% 仍是 none，元素压根没进入可动画状态，opacity 直接读到 1、过渡根本不创建。
+   入场只需要 @starting-style + opacity/transform；display 过渡是给"退场"用的，这里没有退场。 */
+#cleanWrap {
+  transition: opacity var(--t-panel), transform var(--t-panel);
+}
+@starting-style {
+  #cleanWrap { opacity: 0; transform: translateY(calc(var(--blk) * 2)); }
+}
+
+/* 抽屉与遮罩：产品写的是 ease-out，那是"滑"，星露谷是"一块木板推进来"。
+   遮罩比抽屉快 60ms 收住，背景先定、前景后到，层次才对。
+   这两条是后置覆写，产品那条 `@media reduce` 带 !important，仍然赢。 */
+.cfg-drawer { transition: transform var(--t-drawer); }
+.cfg-scrim  { transition: opacity var(--t-panel); }
+
+/* ============================ 响应式 ============================ */@media (max-width: 1320px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) {
+  .wrap { padding: 12px 10px 36px; }
+  .card > *:not(h2) { margin-left: 10px; margin-right: 10px; }
+  .rline { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  .rline .ct { text-align: left; }
+  :root { --measure: 100%; }
+  #rawText, #cleanText, #finalText { font-size: 16px; }
+}
+
+/* ============================ 夜晚谷仓（副档） ============================ */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --wood-dark:   #0F0C08;
+    --wood-mid:    #4A3722;
+    --wood-light:  #6B5030;
+    --wood-pale:   #8A6A44;
+    --parchment:   #2A2118;
+    --parchment-2: #221A13;
+    --slot:        #33291D;
+    --sky:         #16233A;
+    --sky-2:       #22364F;
+    --grass:       #2C4A2A;
+    --grass-2:     #1E3520;
+    --berry:       #E0705D;
+    --berry-2:     #E0705D;
+    --berry-line:  rgba(224, 112, 93, .72);   /* 同样按 3:1 反解：.5 时只有 2.49:1 */
+    --milk:        #1C1610;
+    --cloud:       #DCD3BC;   /* 夜里的云是月光照着的，仍是亮的 */
+    --ink-on-sky:  #FFF3D4;
+    --straw:       #33281A;
+    --rot:         #3A211C;
+    --sprout:      #1E3222;
+
+    --bg-page:  #14100B;
+    --text-1:   #EFE2C4;
+    --text-2:   #CBB894;
+    --text-3:   #A8977A;
+    --text-ph:  #A8977A;
+    --accent:     #7FCB8E;
+    --accent-ink: #7FCB8E;
+    --ok:       #7FCB8E;
+    --ok-solid: #7FCB8E;
+    --hit:      #F0C674;
+    --bad:      #F0917F;
+    --line:     #4A3A26;
+    --line-soft:#3C2F1F;
+    --focus:    #7FD4E8;
+    --edge-field: var(--wood-pale);    /* 暗档面板内芯本身很暗，边界不能再用近黑的 wood-dark：2.12:1 → 3.18:1 */
+    --leaf-hi:      #3E8C52;
+    --leaf-lo:      #23633A;
+    --clay-hi:      #B4483B;
+    --clay-lo:      #8E2F26;
+
+    --surface-select: #23402A;
+    --surface-hover:  #3A2D1D;
+    --shadow-hard:    #000000;
+    --bevel-hi:       rgba(255, 244, 214, .18);
+    --bevel-lo:       rgba(0, 0, 0, .5);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn, .mini, .chip button, #toast, .star,
+  .seg label, .cfg-drawer, .cfg-scrim, #cleanWrap, #finalWarn, .rline .ex s {
+    transition-duration: .01ms !important;
+  }
+  .btn:active, .mini:active { transform: none; }
+  /* 云直接停掉。产品那条全局 `*` 的 animation-duration:.01ms + iteration-count:1
+     本来就会把循环砍成单趟，而关键帧首尾同位保证停回原位；
+     这里再写一遍 animation:none，是不想让"首尾同位"成为唯一的安全依赖。 */
+  .app-head::before { animation: none; }
+}
